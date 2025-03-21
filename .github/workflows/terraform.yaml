@@ -30,17 +30,32 @@ jobs:
     - name: 'Set up Cloud SDK'
       uses: 'google-github-actions/setup-gcloud@v1'
 
-    - name: 'Verify Initial Workload Identity'
+    - name: 'Debug Workload Identity Configuration'
       run: |
-        echo "Current authenticated account:"
-        gcloud auth list
-        echo "Current project:"
-        gcloud config get-value project
-        echo "GitHub context:"
+        echo "=== GitHub Context ==="
         echo "Repository: ${{ github.repository }}"
         echo "Ref: ${{ github.ref }}"
         echo "Event: ${{ github.event_name }}"
         echo "Actor: ${{ github.actor }}"
+        echo "Head Ref: ${{ github.head_ref }}"
+        echo "Base Ref: ${{ github.base_ref }}"
+        echo "Event Type: ${{ github.event.type }}"
+        echo ""
+        echo "=== Workload Identity Provider ==="
+        WORKLOAD_IDENTITY_PROVIDER="${{ secrets.INITIAL_WORKLOAD_IDENTITY_PROVIDER }}"
+        echo "Provider: $WORKLOAD_IDENTITY_PROVIDER"
+        echo ""
+        echo "=== Service Account ==="
+        echo "Service Account: ${{ secrets.INITIAL_SERVICE_ACCOUNT }}"
+        echo ""
+        echo "=== Current Authentication ==="
+        gcloud auth list
+        echo ""
+        echo "=== Current Configuration ==="
+        gcloud config list
+
+    - name: 'Verify Initial Workload Identity'
+      run: |
         echo "Attempting to verify workload identity provider..."
         WORKLOAD_IDENTITY_PROVIDER="${{ secrets.INITIAL_WORKLOAD_IDENTITY_PROVIDER }}"
         if [[ -z "$WORKLOAD_IDENTITY_PROVIDER" ]]; then
