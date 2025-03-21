@@ -25,6 +25,10 @@ jobs:
       with:
         workload_identity_provider: '${{ secrets.INITIAL_WORKLOAD_IDENTITY_PROVIDER }}'
         service_account: '${{ secrets.INITIAL_SERVICE_ACCOUNT }}'
+        token_format: 'access_token'
+
+    - name: 'Set up Cloud SDK'
+      uses: 'google-github-actions/setup-gcloud@v1'
 
     - name: 'Verify Initial Workload Identity'
       run: |
@@ -75,11 +79,13 @@ jobs:
           echo "1. Ensure you're using the correct Google Cloud account"
           echo "2. Verify you have one of these roles: roles/iam.workloadIdentityPoolAdmin, roles/iam.workloadIdentityPoolViewer, or roles/iam.admin"
           echo "3. Check that the workload identity pool exists in the specified project"
+          echo ""
+          echo "Current authentication status:"
+          gcloud auth list
+          echo "Current configuration:"
+          gcloud config list
           exit 1
         fi
-
-    - name: 'Set up Cloud SDK'
-      uses: 'google-github-actions/setup-gcloud@v1'
 
     # Fetch secrets from Secret Manager
     - name: 'Fetch GCP Secrets'
