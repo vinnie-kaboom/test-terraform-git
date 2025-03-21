@@ -30,8 +30,53 @@ jobs:
       run: |
         echo "Current authenticated account:"
         gcloud auth list
-        echo "Current workload identity configuration:"
-        gcloud iam workload-identity-pools describe ${{ secrets.INITIAL_WORKLOAD_IDENTITY_PROVIDER }} --format="table(name,resourceName)"
+        echo "Current project:"
+        gcloud config get-value project
+        echo "GitHub context:"
+        echo "Repository: ${{ github.repository }}"
+        echo "Ref: ${{ github.ref }}"
+        echo "Event: ${{ github.event_name }}"
+        echo "Actor: ${{ github.actor }}"
+        echo "Attempting to verify workload identity provider..."
+        WORKLOAD_IDENTITY_PROVIDER="${{ secrets.INITIAL_WORKLOAD_IDENTITY_PROVIDER }}"
+        if [[ -z "$WORKLOAD_IDENTITY_PROVIDER" ]]; then
+          echo "Error: INITIAL_WORKLOAD_IDENTITY_PROVIDER secret is not set"
+          exit 1
+        fi
+        echo "Workload Identity Provider format check:"
+        if [[ "$WORKLOAD_IDENTITY_PROVIDER" =~ ^projects/[0-9]+/locations/[^/]+/workloadIdentityPools/[^/]+/providers/[^/]+$ ]]; then
+          echo "✓ Format is correct"
+        else
+          echo "✗ Format is incorrect. Expected format: projects/{PROJECT_NUMBER}/locations/{LOCATION}/workloadIdentityPools/{POOL_ID}/providers/{PROVIDER_ID}"
+          echo "Current value: $WORKLOAD_IDENTITY_PROVIDER"
+          exit 1
+        fi
+
+        # Extract project ID from the workload identity provider
+        PROJECT_ID=$(echo "$WORKLOAD_IDENTITY_PROVIDER" | cut -d'/' -f2)
+        echo "Checking IAM permissions for project: $PROJECT_ID"
+        
+        # Check if we have the necessary permissions
+        echo "Verifying IAM permissions..."
+        if ! gcloud projects get-iam-policy "$PROJECT_ID" --flatten="bindings[].members" --format="table(bindings.role,bindings.members)" | grep -E "roles/iam.workloadIdentityPoolAdmin|roles/iam.workloadIdentityPoolViewer|roles/iam.admin"; then
+          echo "Warning: Current account may not have sufficient permissions to view workload identity pools"
+          echo "Required roles: roles/iam.workloadIdentityPoolAdmin, roles/iam.workloadIdentityPoolViewer, or roles/iam.admin"
+          echo "Please ensure your account has one of these roles assigned"
+        fi
+
+        echo "Attempting to describe workload identity pool..."
+        if ! gcloud iam workload-identity-pools describe "$WORKLOAD_IDENTITY_PROVIDER" --format="table(name,resourceName)"; then
+          echo "Error: Failed to describe workload identity pool. This could be due to:"
+          echo "1. Insufficient permissions on your Google Cloud account"
+          echo "2. Workload identity pool doesn't exist"
+          echo "3. The service account doesn't have the roles/iam.workloadIdentityUser role"
+          echo ""
+          echo "To fix this:"
+          echo "1. Ensure you're using the correct Google Cloud account"
+          echo "2. Verify you have one of these roles: roles/iam.workloadIdentityPoolAdmin, roles/iam.workloadIdentityPoolViewer, or roles/iam.admin"
+          echo "3. Check that the workload identity pool exists in the specified project"
+          exit 1
+        fi
 
     - name: 'Set up Cloud SDK'
       uses: 'google-github-actions/setup-gcloud@v1'
