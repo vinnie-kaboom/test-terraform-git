@@ -26,6 +26,13 @@ jobs:
         workload_identity_provider: '${{ secrets.INITIAL_WORKLOAD_IDENTITY_PROVIDER }}'
         service_account: '${{ secrets.INITIAL_SERVICE_ACCOUNT }}'
 
+    - name: 'Verify Initial Workload Identity'
+      run: |
+        echo "Current authenticated account:"
+        gcloud auth list
+        echo "Current workload identity configuration:"
+        gcloud iam workload-identity-pools describe ${{ secrets.INITIAL_WORKLOAD_IDENTITY_PROVIDER }} --format="table(name,resourceName)"
+
     - name: 'Set up Cloud SDK'
       uses: 'google-github-actions/setup-gcloud@v1'
 
