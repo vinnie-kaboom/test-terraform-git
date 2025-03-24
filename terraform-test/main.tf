@@ -2,7 +2,7 @@ provider "google" {
   project     = "sylvan-apogee-450014-a6"
   region      = "us-central1"
   zone        = "us-central1-a"
-  credentials = file("C:/Users/vince/temp/sylvan-apogee-450014-a6-981355801382.json")
+  credentials = file("./sylvan-apogee-450014-a6-981355801382.json")
 }
 
 
