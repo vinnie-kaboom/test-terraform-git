@@ -74,10 +74,10 @@ jobs:
         echo ""
         echo "=== Workload Identity Provider Info ==="
         WORKLOAD_IDENTITY_PROVIDER="${{ secrets.INITIAL_WORKLOAD_IDENTITY_PROVIDER }}"
-        PROJECT_ID=$(echo "$WORKLOAD_IDENTITY_PROVIDER" | cut -d'/' -f2)
-        LOCATION=$(echo "$WORKLOAD_IDENTITY_PROVIDER" | cut -d'/' -f4)
-        POOL_ID=$(echo "$WORKLOAD_IDENTITY_PROVIDER" | cut -d'/' -f6)
-        PROVIDER_ID=$(echo "$WORKLOAD_IDENTITY_PROVIDER" | cut -d'/' -f8)
+        PROJECT_ID="sylvan-apogee-450014-a6"  # Using project ID instead of number
+        LOCATION="global"
+        POOL_ID="github-actions-pool"
+        PROVIDER_ID="github-provider"
         
         echo "Project ID: $PROJECT_ID"
         echo "Location: $LOCATION"
