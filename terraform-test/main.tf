@@ -1,10 +1,8 @@
 provider "google" {
-  project     = "sylvan-apogee-450014-a6"
-  region      = "us-central1"
-  zone        = "us-central1-a"
-  credentials = file("./sylvan-apogee-450014-a6-981355801382.json")
+  project = "sylvan-apogee-450014-a6"
+  region  = "us-central1"
+  zone    = "us-central1-a"
 }
-
 
 # Create a VPC network
 resource "google_compute_network" "vpc_network" {
@@ -30,13 +28,11 @@ resource "google_iam_workload_identity_pool_provider" "main" {
   workload_identity_pool_id          = google_iam_workload_identity_pool.main.workload_identity_pool_id
   workload_identity_pool_provider_id = "my-provider"
   display_name                       = "My Provider"
-  
   attribute_mapping = {
     "google.subject"       = "assertion.sub"
     "attribute.actor"      = "assertion.actor"
     "attribute.repository" = "assertion.repository"
   }
-
   oidc {
     issuer_uri = "https://token.actions.githubusercontent.com"  # Example for GitHub Actions
   }
@@ -46,7 +42,6 @@ resource "google_iam_workload_identity_pool_provider" "main" {
 resource "google_service_account_iam_binding" "workload_identity_binding" {
   service_account_id = google_service_account.workload_identity_sa.name
   role               = "roles/iam.workloadIdentityUser"
-
   members = [
     "principalSet://iam.googleapis.com/${google_iam_workload_identity_pool.main.name}/attribute.repository/your-org/your-repo"
   ]
