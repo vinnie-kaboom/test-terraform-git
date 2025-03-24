@@ -130,7 +130,6 @@ jobs:
           local secret_value
           secret_value=$(gcloud secrets versions access latest --secret="$secret_name" --project="sylvan-apogee-450014-a6" 2>/dev/null || echo "")
           if [[ -n "$secret_value" ]]; then
-            echo "::add-mask::$secret_value"
             echo "$secret_value"
           else
             echo "Warning: Secret $secret_name not found or not accessible"
@@ -138,21 +137,15 @@ jobs:
           fi
         }
 
-        # Get secrets
+        # Get secrets and set them as outputs
         WORKLOAD_IDENTITY_PROVIDER=$(get_secret "github_workload_identity_provider")
         SERVICE_ACCOUNT=$(get_secret "github_service_account")
         PROJECT_ID=$(get_secret "project_id")
 
-        # Set environment variables
-        if [[ -n "$WORKLOAD_IDENTITY_PROVIDER" ]]; then
-          echo "WORKLOAD_IDENTITY_PROVIDER=$WORKLOAD_IDENTITY_PROVIDER" >> $GITHUB_ENV
-        fi
-        if [[ -n "$SERVICE_ACCOUNT" ]]; then
-          echo "SERVICE_ACCOUNT=$SERVICE_ACCOUNT" >> $GITHUB_ENV
-        fi
-        if [[ -n "$PROJECT_ID" ]]; then
-          echo "PROJECT_ID=$PROJECT_ID" >> $GITHUB_ENV
-        fi
+        # Set outputs
+        echo "workload_identity_provider=${WORKLOAD_IDENTITY_PROVIDER}" >> $GITHUB_OUTPUT
+        echo "service_account=${SERVICE_ACCOUNT}" >> $GITHUB_OUTPUT
+        echo "project_id=${PROJECT_ID}" >> $GITHUB_OUTPUT
 
         # Verify required secrets
         if [[ -z "$WORKLOAD_IDENTITY_PROVIDER" ]] || [[ -z "$SERVICE_ACCOUNT" ]] || [[ -z "$PROJECT_ID" ]]; then
@@ -164,13 +157,13 @@ jobs:
     - name: 'Re-Auth to GCP with Secret Manager values'
       uses: 'google-github-actions/auth@v1'
       with:
-        workload_identity_provider: '${{ env.WORKLOAD_IDENTITY_PROVIDER }}'
-        service_account: '${{ env.SERVICE_ACCOUNT }}'
+        workload_identity_provider: '${{ steps.secrets.outputs.workload_identity_provider }}'
+        service_account: '${{ steps.secrets.outputs.service_account }}'
 
     - name: 'Test Secret Manager Access'
       run: |
         echo "Testing Secret Manager Access..."
-        gcloud secrets list --project=${{ env.PROJECT_ID }}
+        gcloud secrets list --project=${{ steps.secrets.outputs.project_id }}
 
     - name: 'Setup Terraform'
       uses: hashicorp/setup-terraform@v2
