@@ -163,7 +163,25 @@ jobs:
     - name: 'Test Secret Manager Access'
       run: |
         echo "Testing Secret Manager Access..."
-        gcloud secrets list --project=${{ steps.secrets.outputs.project_id }}
+        echo "Current project configuration:"
+        gcloud config list project
+        
+        # Ensure project is set correctly
+        gcloud config set project sylvan-apogee-450014-a6
+        
+        echo "Listing secrets..."
+        gcloud secrets list --project=sylvan-apogee-450014-a6 --format="table(name,createTime)"
+        
+        # Test access to specific secrets
+        echo "Testing access to specific secrets..."
+        for secret in "github_workload_identity_provider" "github_service_account" "project_id"; do
+          echo "Testing access to $secret..."
+          if gcloud secrets versions access latest --secret="$secret" --project=sylvan-apogee-450014-a6 2>/dev/null; then
+            echo "✓ Successfully accessed $secret"
+          else
+            echo "✗ Failed to access $secret"
+          fi
+        done
 
     - name: 'Setup Terraform'
       uses: hashicorp/setup-terraform@v2
