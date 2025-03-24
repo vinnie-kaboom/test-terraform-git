@@ -124,12 +124,41 @@ jobs:
     - name: 'Fetch GCP Secrets'
       id: secrets
       run: |
-        echo "::add-mask::$(gcloud secrets versions access latest --secret=github_workload_identity_provider)"
-        echo "WORKLOAD_IDENTITY_PROVIDER=$(gcloud secrets versions access latest --secret=github_workload_identity_provider)" >> $GITHUB_ENV
-        echo "::add-mask::$(gcloud secrets versions access latest --secret=github_service_account)"
-        echo "SERVICE_ACCOUNT=$(gcloud secrets versions access latest --secret=github_service_account)" >> $GITHUB_ENV
-        echo "::add-mask::$(gcloud secrets versions access latest --secret=project_id)"
-        echo "PROJECT_ID=$(gcloud secrets versions access latest --secret=project_id)" >> $GITHUB_ENV
+        # Function to safely get secret
+        get_secret() {
+          local secret_name=$1
+          local secret_value
+          secret_value=$(gcloud secrets versions access latest --secret="$secret_name" --project="sylvan-apogee-450014-a6" 2>/dev/null || echo "")
+          if [[ -n "$secret_value" ]]; then
+            echo "::add-mask::$secret_value"
+            echo "$secret_value"
+          else
+            echo "Warning: Secret $secret_name not found or not accessible"
+            echo ""
+          fi
+        }
+
+        # Get secrets
+        WORKLOAD_IDENTITY_PROVIDER=$(get_secret "github_workload_identity_provider")
+        SERVICE_ACCOUNT=$(get_secret "github_service_account")
+        PROJECT_ID=$(get_secret "project_id")
+
+        # Set environment variables
+        if [[ -n "$WORKLOAD_IDENTITY_PROVIDER" ]]; then
+          echo "WORKLOAD_IDENTITY_PROVIDER=$WORKLOAD_IDENTITY_PROVIDER" >> $GITHUB_ENV
+        fi
+        if [[ -n "$SERVICE_ACCOUNT" ]]; then
+          echo "SERVICE_ACCOUNT=$SERVICE_ACCOUNT" >> $GITHUB_ENV
+        fi
+        if [[ -n "$PROJECT_ID" ]]; then
+          echo "PROJECT_ID=$PROJECT_ID" >> $GITHUB_ENV
+        fi
+
+        # Verify required secrets
+        if [[ -z "$WORKLOAD_IDENTITY_PROVIDER" ]] || [[ -z "$SERVICE_ACCOUNT" ]] || [[ -z "$PROJECT_ID" ]]; then
+          echo "Error: Required secrets are missing. Please ensure all secrets are created in Secret Manager."
+          exit 1
+        fi
 
     # Re-authenticate with fetched credentials
     - name: 'Re-Auth to GCP with Secret Manager values'
