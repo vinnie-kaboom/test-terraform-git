@@ -3,11 +3,35 @@ provider "google" {
   region  = var.region
 }
 
+# Enable required APIs
+resource "google_project_service" "required_apis" {
+  for_each = toset([
+    "iap.googleapis.com",
+    "compute.googleapis.com",
+    "iam.googleapis.com"
+  ])
+  
+  project = var.project_id
+  service = each.value
+  
+  disable_dependent_services = false
+  disable_on_destroy        = false
+}
+
 # Service Account
 resource "google_service_account" "workload_identity_sa" {
   account_id   = var.service_account_id
   display_name = "Workload Identity Service Account"
   description  = "Service account for GitHub Actions Workload Identity"
+  depends_on   = [google_project_service.required_apis]
+}
+
+# Grant necessary IAM roles
+resource "google_project_iam_member" "workload_identity_admin" {
+  project    = var.project_id
+  role       = "roles/iam.workloadIdentityPoolAdmin"
+  member     = "serviceAccount:${google_service_account.workload_identity_sa.email}"
+  depends_on = [google_service_account.workload_identity_sa]
 }
 
 # Workload Identity Pool
@@ -15,6 +39,7 @@ resource "google_iam_workload_identity_pool" "main" {
   workload_identity_pool_id = var.workload_identity_pool_id
   display_name              = "GitHub Actions Pool"
   description              = "Identity pool for GitHub Actions"
+  depends_on               = [google_project_service.required_apis, google_project_iam_member.workload_identity_admin]
 }
 
 # Workload Identity Provider
@@ -34,20 +59,11 @@ resource "google_iam_workload_identity_pool_provider" "main" {
   }
 }
 
-# IAM binding
-resource "google_service_account_iam_binding" "workload_identity_binding" {
-  service_account_id = google_service_account.workload_identity_sa.name
-  role               = "roles/iam.workloadIdentityUser"
-
-  members = [
-    "principalSet://iam.googleapis.com/${google_iam_workload_identity_pool.main.name}/attribute.repository/${var.github_repo}"
-  ]
-}
-
 # Create VPC Network
 resource "google_compute_network" "vpc_network" {
   name                    = "${var.project_id}-vpc"
   auto_create_subnetworks = true
+  depends_on              = [google_project_service.required_apis]
 }
 
 # IAP firewall rule
@@ -85,7 +101,7 @@ resource "google_iap_brand" "project_brand" {
   support_email     = var.support_email
   application_title = "${var.project_id} Bastion Access"
   project          = var.project_id
-  depends_on = [google_project_service.required_apis]
+  depends_on       = [google_project_service.required_apis]
 }
 
 # IAP OAuth client
@@ -101,6 +117,7 @@ resource "google_iap_tunnel_instance_iam_binding" "enable_iap" {
   instance = google_compute_instance.vm_instance.name
   role     = "roles/iap.tunnelResourceAccessor"
   members  = var.iap_authorized_users
+  depends_on = [google_compute_instance.vm_instance, google_iap_brand.project_brand]
 }
 
 # Modify the VM instance with enhanced security
@@ -108,6 +125,7 @@ resource "google_compute_instance" "vm_instance" {
   name         = "${var.project_id}-bastion"
   machine_type = "e2-micro"
   zone         = var.zone
+  depends_on   = [google_project_service.required_apis]
 
   tags = ["bastion-host"]
 
@@ -191,7 +209,6 @@ resource "google_compute_instance" "vm_instance" {
     enable_vtpm                = true
     enable_integrity_monitoring = true
   }
-  depends_on = [google_project_service.required_apis]
 }
 
 # Output the VM's IP address
@@ -255,26 +272,4 @@ output "security_details" {
     shielded_vm       = true
     confidential_computing = true
   }
-}
-
-# Enable required APIs
-resource "google_project_service" "required_apis" {
-  for_each = toset([
-    "iap.googleapis.com",
-    "compute.googleapis.com",
-    "iam.googleapis.com"
-  ])
-  
-  project = var.project_id
-  service = each.value
-  
-  disable_dependent_services = false
-  disable_on_destroy        = false
-}
-
-# Grant necessary IAM roles
-resource "google_project_iam_member" "workload_identity_admin" {
-  project = var.project_id
-  role    = "roles/iam.workloadIdentityPoolAdmin"
-  member  = "serviceAccount:${google_service_account.workload_identity_sa.email}"
 }
