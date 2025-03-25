@@ -95,11 +95,11 @@ resource "google_iap_client" "project_client" {
 
 # IAP tunnel IAM binding
 resource "google_iap_tunnel_instance_iam_binding" "enable_iap" {
-  project = var.project_id
-  zone    = var.zone
+  project  = var.project_id
+  zone     = var.zone
   instance = google_compute_instance.vm_instance.name
   role     = "roles/iap.tunnelResourceAccessor"
-  members = var.iap_authorized_users  
+  members  = [for user in var.iap_authorized_users : format("user:%s", user)]
 }
 
 # Modify the VM instance with enhanced security
