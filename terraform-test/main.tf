@@ -101,3 +101,31 @@ output "workload_identity_provider" {
 output "service_account_email" {
   value = google_service_account.workload_identity_sa.email
 }
+
+# Outputs
+output "vm_instance_details" {
+  description = "Details of the created VM instance"
+  value = {
+    name         = google_compute_instance.vm_instance.name
+    machine_type = google_compute_instance.vm_instance.machine_type
+    zone         = google_compute_instance.vm_instance.zone
+    public_ip    = google_compute_instance.vm_instance.network_interface[0].access_config[0].nat_ip
+  }
+}
+
+output "vpc_network_details" {
+  description = "Details of the created VPC network"
+  value = {
+    name = google_compute_network.vpc_network.name
+    id   = google_compute_network.vpc_network.id
+  }
+}
+
+output "workload_identity_details" {
+  description = "Details of the Workload Identity configuration"
+  value = {
+    pool_name           = google_iam_workload_identity_pool.main.name
+    provider_name       = google_iam_workload_identity_pool_provider.main.name
+    service_account     = google_service_account.workload_identity_sa.email
+  }
+}
