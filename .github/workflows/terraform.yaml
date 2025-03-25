@@ -74,7 +74,10 @@ jobs:
         echo ""
         echo "=== Workload Identity Provider Info ==="
         WORKLOAD_IDENTITY_PROVIDER="${{ secrets.INITIAL_WORKLOAD_IDENTITY_PROVIDER }}"
-        PROJECT_ID="${{ steps.secrets.outputs.project_id }}"
+        # Set project ID explicitly before using it
+        PROJECT_ID="sylvan-apogee-450014-a6"  # Temporarily hardcode until secrets are fetched
+        gcloud config set project "$PROJECT_ID"
+        
         LOCATION="global"
         POOL_ID="github-actions-pool"
         PROVIDER_ID="github-provider"
