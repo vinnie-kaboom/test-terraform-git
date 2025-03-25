@@ -1,0 +1,151 @@
+name: 'Terraform'
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    types: [opened, synchronize, closed]  # Trigger on PR events including merge
+    branches: [ "main" ]
+  
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  terraform:
+    name: 'Terraform'
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v3
+
+    # Initial auth with minimal secrets
+    - name: 'Debug GitHub Context'
+      run: |
+        echo "=== GitHub Context Details ==="
+        echo "Repository: ${{ github.repository }}"
+        echo "Ref: ${{ github.ref }}"
+        echo "Event Name: ${{ github.event_name }}"
+        echo "Event Type: ${{ github.event.type }}"
+        echo "Actor: ${{ github.actor }}"
+        echo "Head Ref: ${{ github.head_ref }}"
+        echo "Base Ref: ${{ github.base_ref }}"
+        echo "Repository Owner: ${{ github.repository_owner }}"
+        echo "Repository Name: ${{ github.event.repository.name }}"
+        echo "Repository Full Name: ${{ github.event.repository.full_name }}"
+        echo "Default Branch: ${{ github.event.repository.default_branch }}"
+        echo ""
+        echo "=== Workload Identity Provider Format Check ==="
+        WORKLOAD_IDENTITY_PROVIDER="${{ secrets.INITIAL_WORKLOAD_IDENTITY_PROVIDER }}"
+        if [[ -z "$WORKLOAD_IDENTITY_PROVIDER" ]]; then
+          echo "Error: INITIAL_WORKLOAD_IDENTITY_PROVIDER secret is not set"
+          exit 1
+        fi
+        echo "Provider Format: $WORKLOAD_IDENTITY_PROVIDER"
+        if [[ "$WORKLOAD_IDENTITY_PROVIDER" =~ ^projects/[0-9]+/locations/[^/]+/workloadIdentityPools/[^/]+/providers/[^/]+$ ]]; then
+          echo "✓ Provider format is correct"
+        else
+          echo "✗ Provider format is incorrect"
+          echo "Expected format: projects/{PROJECT_NUMBER}/locations/{LOCATION}/workloadIdentityPools/{POOL_ID}/providers/{PROVIDER_ID}"
+          exit 1
+        fi
+
+    - name: 'Initial Auth to GCP'
+      uses: 'google-github-actions/auth@v1'
+      with:
+        workload_identity_provider: '${{ secrets.INITIAL_WORKLOAD_IDENTITY_PROVIDER }}'
+        service_account: '${{ secrets.INITIAL_SERVICE_ACCOUNT }}'
+        token_format: 'access_token'
+        create_credentials_file: true
+        project_id: 'sylvan-apogee-450014-a6'  # Add explicit project_id
+
+    - name: 'Set up Cloud SDK'
+      uses: 'google-github-actions/setup-gcloud@v1'
+
+    - name: 'Verify Authentication'
+      run: |
+        echo "=== Authentication Status ==="
+        gcloud auth list
+        echo ""
+        echo "=== Current Configuration ==="
+        gcloud config list
+        echo ""
+        echo "=== Service Account Info ==="
+        echo "Service Account: ${{ secrets.INITIAL_SERVICE_ACCOUNT }}"
+        echo ""
+        echo "=== Workload Identity Provider Info ==="
+        WORKLOAD_IDENTITY_PROVIDER="${{ secrets.INITIAL_WORKLOAD_IDENTITY_PROVIDER }}"
+        # Set project ID explicitly before using it
+        PROJECT_ID="sylvan-apogee-450014-a6"  # Temporarily hardcode until secrets are fetched
+        gcloud config set project "$PROJECT_ID"
+        
+        LOCATION="global"
+        POOL_ID="github-actions-pool"
+        PROVIDER_ID="github-provider"
+        
+        echo "Project ID: $PROJECT_ID"
+        echo "Location: $LOCATION"
+        echo "Pool ID: $POOL_ID"
+        echo "Provider ID: $PROVIDER_ID"
+        echo "Full Provider: $WORKLOAD_IDENTITY_PROVIDER"
+        echo ""
+        echo "=== Verifying Workload Identity Pool ==="
+        if ! gcloud iam workload-identity-pools describe "$POOL_ID" \
+          --project="$PROJECT_ID" \
+          --location="$LOCATION" \
+          --format="table(name,resourceName)"; then
+          echo "Error: Failed to describe workload identity pool"
+          echo "This could mean:"
+          echo "1. The pool doesn't exist"
+          echo "2. You don't have permission to view it"
+          echo "3. The project/location/pool ID is incorrect"
+          exit 1
+        fi
+        echo ""
+        echo "=== Verifying Workload Identity Provider ==="
+        if ! gcloud iam workload-identity-pools providers describe "$PROVIDER_ID" \
+          --project="$PROJECT_ID" \
+          --location="$LOCATION" \
+          --workload-identity-pool="$POOL_ID" \
+          --format="table(name,resourceName,attributeCondition)"; then
+          echo "Error: Failed to describe workload identity provider"
+          echo "This could mean:"
+          echo "1. The provider doesn't exist"
+          echo "2. You don't have permission to view it"
+          echo "3. The project/location/pool/provider IDs are incorrect"
+          exit 1
+        fi
+        echo ""
+        echo "=== Verifying Service Account Permissions ==="
+        if ! gcloud projects get-iam-policy "$PROJECT_ID" \
+          --flatten="bindings[].members" \
+          --format="table(bindings.role,bindings.members)" | grep "${{ secrets.INITIAL_SERVICE_ACCOUNT }}"; then
+          echo "Warning: Service account ${{ secrets.INITIAL_SERVICE_ACCOUNT }} not found in project IAM policy"
+          echo "Make sure the service account has the roles/iam.workloadIdentityUser role"
+        fi
+
+    - name: 'Setup Terraform'
+      uses: hashicorp/setup-terraform@v2
+
+    - name: 'Terraform Init'
+      run: |
+        cd terraform-test
+        terraform init
+
+    - name: 'Terraform Format'
+      run: |
+        cd terraform-test
+        terraform fmt
+        terraform fmt -check
+
+    - name: 'Terraform Plan'
+      run: |
+        cd terraform-test
+        terraform plan
+
+    - name: 'Terraform Apply'
+      if: github.event_name == 'pull_request' && github.event.pull_request.merged == true
+      run: |
+        cd terraform-test
+        terraform apply -auto-approve
