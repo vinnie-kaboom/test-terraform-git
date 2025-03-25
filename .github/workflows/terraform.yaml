@@ -145,14 +145,16 @@ jobs:
         # Check if email has content (safely)
         if [ -n "${{ secrets.AUTHORIZED_USER }}" ]; then
           echo "AUTHORIZED_USER is set ✓"
-          echo "First character: ${${{ secrets.AUTHORIZED_USER }}:0:1}"
+          EMAIL="${{ secrets.AUTHORIZED_USER }}"
+          echo "Email length: ${#EMAIL}"
         else
           echo "AUTHORIZED_USER is empty ✗"
         fi
         
         if [ -n "${{ secrets.SUPPORT_EMAIL }}" ]; then
           echo "SUPPORT_EMAIL is set ✓"
-          echo "First character: ${${{ secrets.SUPPORT_EMAIL }}:0:1}"
+          SUPPORT="${{ secrets.SUPPORT_EMAIL }}"
+          echo "Support email length: ${#SUPPORT}"
         else
           echo "SUPPORT_EMAIL is empty ✗"
         fi
@@ -166,15 +168,7 @@ jobs:
     - name: 'Terraform Plan'
       run: |
         cd terraform-test
-        # Store email in variable and show length
         EMAIL="${{ secrets.AUTHORIZED_USER }}"
-        echo "Email length: ${#EMAIL}"
-        
-        # Show the terraform command (without exposing the email)
-        echo "Running terraform plan with following structure:"
-        echo "support_email: [length: ${#EMAIL}]"
-        echo "iap_authorized_users: [\"user:<email>\"]"
-        echo "github_repo: ${{ github.repository }}"
         
         terraform plan \
           -var="support_email=${{ secrets.SUPPORT_EMAIL }}" \
