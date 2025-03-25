@@ -74,7 +74,7 @@ jobs:
         echo ""
         echo "=== Workload Identity Provider Info ==="
         WORKLOAD_IDENTITY_PROVIDER="${{ secrets.INITIAL_WORKLOAD_IDENTITY_PROVIDER }}"
-        PROJECT_ID="sylvan-apogee-450014-a6"  # Using project ID instead of number
+        PROJECT_ID="${{ steps.secrets.outputs.project_id }}"
         LOCATION="global"
         POOL_ID="github-actions-pool"
         PROVIDER_ID="github-provider"
@@ -128,7 +128,7 @@ jobs:
         get_secret() {
           local secret_name=$1
           local secret_value
-          secret_value=$(gcloud secrets versions access latest --secret="$secret_name" --project="sylvan-apogee-450014-a6" 2>/dev/null || echo "")
+          secret_value=$(gcloud secrets versions access latest --secret="$secret_name" --project="${{ steps.secrets.outputs.project_id }}" 2>/dev/null || echo "")
           if [[ -n "$secret_value" ]]; then
             echo "$secret_value"
           else
@@ -167,16 +167,16 @@ jobs:
         gcloud config list project
         
         # Ensure project is set correctly
-        gcloud config set project sylvan-apogee-450014-a6
+        gcloud config set project ${{ steps.secrets.outputs.project_id }}
         
         echo "Listing secrets..."
-        gcloud secrets list --project=sylvan-apogee-450014-a6 --format="table(name,createTime)"
+        gcloud secrets list --project=${{ steps.secrets.outputs.project_id }} --format="table(name,createTime)"
         
         # Test access to specific secrets
         echo "Testing access to specific secrets..."
         for secret in "github_workload_identity_provider" "github_service_account" "project_id"; do
           echo "Testing access to $secret..."
-          if gcloud secrets versions access latest --secret="$secret" --project=sylvan-apogee-450014-a6 2>/dev/null; then
+          if gcloud secrets versions access latest --secret="$secret" --project=${{ steps.secrets.outputs.project_id }} 2>/dev/null; then
             echo "✓ Successfully accessed $secret"
           else
             echo "✗ Failed to access $secret"
@@ -191,6 +191,22 @@ jobs:
         cd terraform-test
         terraform init
 
+    - name: 'Import Existing Resources'
+      if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+      run: |
+        cd terraform-test
+        # Import service account
+        terraform import google_service_account.workload_identity_sa projects/${{ steps.secrets.outputs.project_id }}/serviceAccounts/workload-identity-sa@${{ steps.secrets.outputs.project_id }}.iam.gserviceaccount.com
+        
+        # Import workload identity pool
+        terraform import google_iam_workload_identity_pool.main projects/${{ steps.secrets.outputs.project_id }}/locations/global/workloadIdentityPools/github-actions-pool
+        
+        # Import workload identity provider
+        terraform import google_iam_workload_identity_pool_provider.main projects/${{ steps.secrets.outputs.project_id }}/locations/global/workloadIdentityPools/github-actions-pool/providers/github-provider
+        
+        # Import IAM binding
+        terraform import google_service_account_iam_binding.workload_identity_binding "projects/${{ steps.secrets.outputs.project_id }}/serviceAccounts/workload-identity-sa@${{ steps.secrets.outputs.project_id }}.iam.gserviceaccount.com roles/iam.workloadIdentityUser"
+
     - name: 'Terraform Format'
       run: |
         cd terraform-test
@@ -202,9 +218,8 @@ jobs:
         cd terraform-test
         terraform plan
 
-    # Uncomment if you want to allow terraform apply on main branch
-    # - name: 'Terraform Apply'
-    #   if: github.ref == 'refs/heads/main' && github.event_name == 'push'
-    #   run: |
-    #     cd terraform-test
-    #     terraform apply -auto-approve
+    - name: 'Terraform Apply'
+      if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+      run: |
+        cd terraform-test
+        terraform apply -auto-approve

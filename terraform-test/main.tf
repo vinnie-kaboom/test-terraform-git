@@ -1,56 +1,53 @@
 provider "google" {
-  project = "sylvan-apogee-450014-a6"
-  region  = "us-central1"
-  zone    = "us-central1-a"
+  project = var.project_id
+  region  = var.region
 }
 
-# Create a VPC network
-resource "google_compute_network" "vpc_network" {
-  name                    = "sylvan-apogee-450014-a6-network"
-  auto_create_subnetworks = "true"
-}
-
-# Create a service account
+# Service Account
 resource "google_service_account" "workload_identity_sa" {
-  account_id   = "workload-identity-sa"
-  display_name = "Service Account for Workload Identity"
+  account_id   = var.service_account_id
+  display_name = "Workload Identity Service Account"
+  description  = "Service account for GitHub Actions Workload Identity"
 }
 
-# Create Workload Identity Pool
+# Workload Identity Pool
 resource "google_iam_workload_identity_pool" "main" {
-  workload_identity_pool_id = "sylvan-apogee-450014-a6-pool"
-  display_name             = "sylvan-apogee-450014-a6 Identity Pool"
-  description             = "Identity pool for automated workloads"
+  workload_identity_pool_id = var.workload_identity_pool_id
+  display_name              = "GitHub Actions Pool"
+  description              = "Identity pool for GitHub Actions"
 }
 
-# Create Workload Identity Pool Provider
+# Workload Identity Provider
 resource "google_iam_workload_identity_pool_provider" "main" {
   workload_identity_pool_id          = google_iam_workload_identity_pool.main.workload_identity_pool_id
-  workload_identity_pool_provider_id = "my-provider"
-  display_name                       = "My Provider"
+  workload_identity_pool_provider_id = var.provider_id
+  display_name                       = "GitHub Actions Provider"
+  
   attribute_mapping = {
     "google.subject"       = "assertion.sub"
     "attribute.actor"      = "assertion.actor"
     "attribute.repository" = "assertion.repository"
   }
+
   oidc {
-    issuer_uri = "https://token.actions.githubusercontent.com"  # Example for GitHub Actions
+    issuer_uri = "https://token.actions.githubusercontent.com"
   }
 }
 
-# IAM binding for the service account
+# IAM binding
 resource "google_service_account_iam_binding" "workload_identity_binding" {
   service_account_id = google_service_account.workload_identity_sa.name
   role               = "roles/iam.workloadIdentityUser"
+
   members = [
-    "principalSet://iam.googleapis.com/${google_iam_workload_identity_pool.main.name}/attribute.repository/your-org/your-repo"
+    "principalSet://iam.googleapis.com/${google_iam_workload_identity_pool.main.name}/attribute.repository/${var.github_repo}"
   ]
 }
 
 # Create a VM instance
 resource "google_compute_instance" "vm_instance" {
-  name         = "sylvan-apogee-450014-a6t-vm"
-  machine_type = "e2-micro"  # Very small, cost-effective instance type
+  name         = "${var.project_id}-vm"
+  machine_type = "e2-micro" 
 
   boot_disk {
     initialize_params {
@@ -70,7 +67,7 @@ resource "google_compute_instance" "vm_instance" {
   # Add some labels for better organization
   labels = {
     environment = "development"
-    purpose     = "sylvan-apogee-450014-a6-testing"
+    purpose     = "${var.project_id}-testing"
   }
 
   # Enable deletion protection to prevent accidental deletion
@@ -81,13 +78,6 @@ resource "google_compute_instance" "vm_instance" {
     email  = google_service_account.workload_identity_sa.email
     scopes = ["cloud-platform"]
   }
-
-  # Use preemptible instance for even lower cost (but with limitations)
-  # scheduling {
-  #   preemptible = true
-  #   automatic_restart = false
-  #   on_host_maintenance = "TERMINATE"
-  # }
 }
 
 # Output the VM's IP address
