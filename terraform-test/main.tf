@@ -85,6 +85,7 @@ resource "google_iap_brand" "project_brand" {
   support_email     = var.support_email
   application_title = "${var.project_id} Bastion Access"
   project          = var.project_id
+  depends_on = [google_project_service.required_apis]
 }
 
 # IAP OAuth client
@@ -99,7 +100,7 @@ resource "google_iap_tunnel_instance_iam_binding" "enable_iap" {
   zone     = var.zone
   instance = google_compute_instance.vm_instance.name
   role     = "roles/iap.tunnelResourceAccessor"
-  members  = [for user in var.iap_authorized_users : format("user:%s", user)]
+  members  = var.iap_authorized_users
 }
 
 # Modify the VM instance with enhanced security
@@ -190,6 +191,7 @@ resource "google_compute_instance" "vm_instance" {
     enable_vtpm                = true
     enable_integrity_monitoring = true
   }
+  depends_on = [google_project_service.required_apis]
 }
 
 # Output the VM's IP address
@@ -253,4 +255,26 @@ output "security_details" {
     shielded_vm       = true
     confidential_computing = true
   }
+}
+
+# Enable required APIs
+resource "google_project_service" "required_apis" {
+  for_each = toset([
+    "iap.googleapis.com",
+    "compute.googleapis.com",
+    "iam.googleapis.com"
+  ])
+  
+  project = var.project_id
+  service = each.value
+  
+  disable_dependent_services = false
+  disable_on_destroy        = false
+}
+
+# Grant necessary IAM roles
+resource "google_project_iam_member" "workload_identity_admin" {
+  project = var.project_id
+  role    = "roles/iam.workloadIdentityPoolAdmin"
+  member  = "serviceAccount:${google_service_account.workload_identity_sa.email}"
 }

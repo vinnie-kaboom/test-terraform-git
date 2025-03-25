@@ -165,6 +165,18 @@ jobs:
         # Show repository value
         echo "Repository: ${{ github.repository }}"
 
+    - name: 'Import Existing Resources'
+      run: |
+        cd terraform-test
+        
+        # Try to import existing service account
+        terraform import google_service_account.workload_identity_sa \
+          "projects/sylvan-apogee-450014-a6/serviceAccounts/workload-identity-sa@sylvan-apogee-450014-a6.iam.gserviceaccount.com" || true
+        
+        # Try to import existing VPC
+        terraform import google_compute_network.vpc_network \
+          "projects/sylvan-apogee-450014-a6/global/networks/sylvan-apogee-450014-a6-vpc" || true
+
     - name: 'Terraform Plan'
       run: |
         cd terraform-test
@@ -179,7 +191,9 @@ jobs:
       if: github.event.pull_request.merged == true
       run: |
         cd terraform-test
+        EMAIL="${{ secrets.AUTHORIZED_USER }}"
+        
         terraform apply -auto-approve \
           -var="support_email=${{ secrets.SUPPORT_EMAIL }}" \
-          -var='iap_authorized_users=["user:${{ secrets.AUTHORIZED_USER }}"]' \
+          -var="iap_authorized_users=[\"user:${EMAIL}\"]" \
           -var="github_repo=${{ github.repository }}"
