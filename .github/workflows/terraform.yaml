@@ -139,12 +139,46 @@ jobs:
         terraform fmt
         terraform fmt -check
 
+    - name: 'Debug Variables'
+      run: |
+        cd terraform-test
+        # Check if email has content (safely)
+        if [ -n "${{ secrets.AUTHORIZED_USER }}" ]; then
+          echo "AUTHORIZED_USER is set ✓"
+          echo "First character: ${${{ secrets.AUTHORIZED_USER }}:0:1}"
+        else
+          echo "AUTHORIZED_USER is empty ✗"
+        fi
+        
+        if [ -n "${{ secrets.SUPPORT_EMAIL }}" ]; then
+          echo "SUPPORT_EMAIL is set ✓"
+          echo "First character: ${${{ secrets.SUPPORT_EMAIL }}:0:1}"
+        else
+          echo "SUPPORT_EMAIL is empty ✗"
+        fi
+        
+        # Show the constructed IAM member string format (safely)
+        echo "IAM member format will be: user:<email>"
+        
+        # Show repository value
+        echo "Repository: ${{ github.repository }}"
+
     - name: 'Terraform Plan'
       run: |
         cd terraform-test
+        # Store email in variable and show length
+        EMAIL="${{ secrets.AUTHORIZED_USER }}"
+        echo "Email length: ${#EMAIL}"
+        
+        # Show the terraform command (without exposing the email)
+        echo "Running terraform plan with following structure:"
+        echo "support_email: [length: ${#EMAIL}]"
+        echo "iap_authorized_users: [\"user:<email>\"]"
+        echo "github_repo: ${{ github.repository }}"
+        
         terraform plan \
           -var="support_email=${{ secrets.SUPPORT_EMAIL }}" \
-          -var='iap_authorized_users=["user:${{ secrets.AUTHORIZED_USER }}"]' \
+          -var="iap_authorized_users=[\"user:${EMAIL}\"]" \
           -var="github_repo=${{ github.repository }}"
 
     - name: 'Terraform Apply'

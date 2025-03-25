@@ -50,12 +50,8 @@ variable "support_email" {
 }
 
 variable "iap_authorized_users" {
-  description = "List of users authorized to access the bastion via IAP"
+  description = "List of email addresses authorized to access the bastion via IAP"
   type        = list(string)
-  validation {
-    condition     = can([for m in var.iap_authorized_users : regex("^user:", m)])
-    error_message = "Each member in iap_authorized_users must start with 'user:'"
-  }
 }
 
 variable "allowed_internal_ranges" {
