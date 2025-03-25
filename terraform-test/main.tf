@@ -53,7 +53,8 @@ resource "google_compute_network" "vpc_network" {
 # Create a VM instance
 resource "google_compute_instance" "vm_instance" {
   name         = "${var.project_id}-vm"
-  machine_type = "e2-micro" 
+  machine_type = "e2-micro"
+  zone         = var.zone
 
   boot_disk {
     initialize_params {

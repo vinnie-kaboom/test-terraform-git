@@ -31,3 +31,9 @@ variable "github_repo" {
   description = "The GitHub repository in format 'owner/repo'"
   type        = string
 }
+
+variable "zone" {
+  description = "The GCP zone for the VM instance"
+  type        = string
+  default     = "us-central1-a"  # Default zone in us-central1 region
+}
