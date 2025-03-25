@@ -44,6 +44,12 @@ resource "google_service_account_iam_binding" "workload_identity_binding" {
   ]
 }
 
+# Create VPC Network
+resource "google_compute_network" "vpc_network" {
+  name                    = "${var.project_id}-vpc"
+  auto_create_subnetworks = true
+}
+
 # Create a VM instance
 resource "google_compute_instance" "vm_instance" {
   name         = "${var.project_id}-vm"
