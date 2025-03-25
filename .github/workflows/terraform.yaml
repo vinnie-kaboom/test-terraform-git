@@ -144,7 +144,7 @@ jobs:
         cd terraform-test
         terraform plan \
           -var="support_email=${{ secrets.SUPPORT_EMAIL }}" \
-          -var="iap_authorized_users=[\"user:${{ secrets.AUTHORIZED_USER }}\"]" \
+          -var='iap_authorized_users=["user:${{ secrets.AUTHORIZED_USER }}"]' \
           -var="github_repo=${{ github.repository }}"
 
     - name: 'Terraform Apply'
@@ -153,5 +153,5 @@ jobs:
         cd terraform-test
         terraform apply -auto-approve \
           -var="support_email=${{ secrets.SUPPORT_EMAIL }}" \
-          -var="iap_authorized_users=[\"user:${{ secrets.AUTHORIZED_USER }}\"]" \
+          -var='iap_authorized_users=["user:${{ secrets.AUTHORIZED_USER }}"]' \
           -var="github_repo=${{ github.repository }}"
