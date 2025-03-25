@@ -50,9 +50,8 @@ variable "support_email" {
 }
 
 variable "iap_authorized_users" {
-  description = "List of users authorized to access the bastion via IAP"
+  description = "List of email addresses authorized to access the bastion via IAP"
   type        = list(string)
-  # Example: ["user:user@example.com", "group:group@example.com"]
 }
 
 variable "allowed_internal_ranges" {
