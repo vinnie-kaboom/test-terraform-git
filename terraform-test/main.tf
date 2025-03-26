@@ -38,10 +38,22 @@ resource "google_service_account" "service-account-1" {
 
 # Grant necessary IAM roles
 resource "google_project_iam_member" "workload_identity_admin" {
-  project    = var.project_id
-  role       = "roles/iam.workloadIdentityPoolAdmin"
-  member     = "serviceAccount:${google_service_account.service-account-1.email}"
-  depends_on = [google_service_account.service-account-1]
+  project = var.project_id
+  role    = "roles/iam.serviceAccountUser"
+  member  = "serviceAccount:${google_service_account.service-account-1.email}"
+}
+
+# Add necessary IAM roles for the service account
+resource "google_project_iam_member" "service_account_roles" {
+  for_each = toset([
+    "roles/compute.instanceAdmin.v1",
+    "roles/iam.serviceAccountUser",
+    "roles/compute.networkAdmin"
+  ])
+  
+  project = var.project_id
+  role    = each.value
+  member  = "serviceAccount:${google_service_account.service-account-1.email}"
 }
 
 # Workload Identity Pool
@@ -162,60 +174,46 @@ resource "google_compute_instance" "vm_instance" {
       size  = 10
       type  = "pd-standard"
     }
-    # Enable disk encryption
-    kms_key_self_link = var.disk_encryption_key
   }
 
   network_interface {
     network = google_compute_network.vpc_network.name
     access_config {
-      # Keep external IP for IAP access
     }
   }
 
-  # Enhanced metadata for security
   metadata = {
-    enable-oslogin = "TRUE"
-    enable-oslogin-2fa = "TRUE"
+    enable-oslogin       = "TRUE"
+    enable-oslogin-2fa   = "TRUE"
     block-project-ssh-keys = "TRUE"
-    serial-port-enable = "FALSE"
+    serial-port-enable   = "FALSE"
     enable-guest-attributes = "FALSE"
     
-    # Startup script for additional hardening
-    startup-script = <<-EOF
+    startup-script = <<-EOT
       #!/bin/bash
-      # Update system
       apt-get update && apt-get upgrade -y
-
-      # Install necessary security packages
       apt-get install -y \
         fail2ban \
         unattended-upgrades \
         apt-listchanges
 
-      # Configure unattended-upgrades
       echo 'Unattended-Upgrade::Automatic-Reboot "true";' >> /etc/apt/apt.conf.d/50unattended-upgrades
       echo 'Unattended-Upgrade::Automatic-Reboot-Time "02:00";' >> /etc/apt/apt.conf.d/50unattended-upgrades
 
-      # Harden SSH configuration
       sed -i 's/#PermitRootLogin yes/PermitRootLogin no/' /etc/ssh/sshd_config
       sed -i 's/PasswordAuthentication yes/PasswordAuthentication no/' /etc/ssh/sshd_config
       sed -i 's/#MaxAuthTries 6/MaxAuthTries 3/' /etc/ssh/sshd_config
       
-      # Restart SSH service
       systemctl restart sshd
 
-      # Setup basic firewall rules
       iptables -A INPUT -p tcp --dport 22 -j ACCEPT
       iptables -A INPUT -m state --state ESTABLISHED,RELATED -j ACCEPT
       iptables -P INPUT DROP
       
-      # Install iptables-persistent to save rules
       DEBIAN_FRONTEND=noninteractive apt-get install -y iptables-persistent
-    EOF
+    EOT
   }
 
-  # Enhanced service account configuration
   service_account {
     email  = google_service_account.service-account-1.email
     scopes = [
@@ -225,16 +223,10 @@ resource "google_compute_instance" "vm_instance" {
     ]
   }
 
-  # Enable confidential computing if available
-  confidential_instance_config {
-    enable_confidential_compute = true
-  }
-
-  # Enable shielded VM options
   shielded_instance_config {
-    enable_secure_boot          = true
-    enable_vtpm                = true
     enable_integrity_monitoring = true
+    enable_secure_boot         = true
+    enable_vtpm               = true
   }
 }
 
@@ -284,19 +276,17 @@ output "workload_identity_details" {
 output "bastion_details" {
   description = "Details of the bastion host"
   value = {
-    name         = google_compute_instance.vm_instance.name
-    external_ip  = google_compute_instance.vm_instance.network_interface[0].access_config[0].nat_ip
-    internal_ip  = google_compute_instance.vm_instance.network_interface[0].network_ip
-    ssh_command  = "gcloud compute ssh ${google_compute_instance.vm_instance.name} --zone=${var.zone}"
+    name        = google_compute_instance.vm_instance.name
+    external_ip = google_compute_instance.vm_instance.network_interface[0].access_config[0].nat_ip
+    internal_ip = google_compute_instance.vm_instance.network_interface[0].network_ip
+    ssh_command = "gcloud compute ssh ${google_compute_instance.vm_instance.name} --zone=${var.zone}"
   }
 }
 
 output "security_details" {
   description = "Security-related details for the bastion host"
   value = {
-    iap_tunnel_command = "gcloud compute start-iap-tunnel ${google_compute_instance.vm_instance.name} 22 --local-host-port=localhost:2222 --zone=${var.zone}"
-    oslogin_enabled    = true
-    shielded_vm       = true
-    confidential_computing = true
+    oslogin_enabled = true
+    shielded_vm     = true
   }
 }
