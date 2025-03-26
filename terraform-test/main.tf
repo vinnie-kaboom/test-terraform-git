@@ -113,7 +113,7 @@ resource "google_iap_brand" "project_brand" {
   project          = var.project_id
   depends_on       = [
     google_project_service.required_apis,
-    data "google_project_service" "iap"
+    data.google_project_service.iap
   ]
 
   lifecycle {
