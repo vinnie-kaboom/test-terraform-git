@@ -29,7 +29,7 @@ resource "google_project_service" "required_apis" {
 }
 
 # Service Account
-resource "google_service_account" "workload_identity_sa" {
+resource "google_service_account" "service-account-1" {
   account_id   = var.service_account_id
   display_name = "Workload Identity Service Account"
   description  = "Service account for GitHub Actions Workload Identity"
@@ -40,8 +40,8 @@ resource "google_service_account" "workload_identity_sa" {
 resource "google_project_iam_member" "workload_identity_admin" {
   project    = var.project_id
   role       = "roles/iam.workloadIdentityPoolAdmin"
-  member     = "serviceAccount:${google_service_account.workload_identity_sa.email}"
-  depends_on = [google_service_account.workload_identity_sa]
+  member     = "serviceAccount:${google_service_account.service-account-1.email}"
+  depends_on = [google_service_account.service-account-1]
 }
 
 # Workload Identity Pool
@@ -217,7 +217,7 @@ resource "google_compute_instance" "vm_instance" {
 
   # Enhanced service account configuration
   service_account {
-    email  = google_service_account.workload_identity_sa.email
+    email  = google_service_account.service-account-1.email
     scopes = [
       "https://www.googleapis.com/auth/cloud-platform",
       "https://www.googleapis.com/auth/compute",
@@ -250,7 +250,7 @@ output "workload_identity_provider" {
 
 # Output the service account email
 output "service_account_email" {
-  value = google_service_account.workload_identity_sa.email
+  value = google_service_account.service-account-1.email
 }
 
 # Outputs
@@ -277,7 +277,7 @@ output "workload_identity_details" {
   value = {
     pool_name           = google_iam_workload_identity_pool.main.name
     provider_name       = google_iam_workload_identity_pool_provider.main.name
-    service_account     = google_service_account.workload_identity_sa.email
+    service_account     = google_service_account.service-account-1.email
   }
 }
 
