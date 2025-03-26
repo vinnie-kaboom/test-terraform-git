@@ -184,6 +184,7 @@ jobs:
         terraform apply -auto-approve \
           -var="support_email=${{ secrets.SUPPORT_EMAIL }}" \
           -var="iap_authorized_users=[\"user:${EMAIL}\"]" \
-          -var="github_repo=${{ github.repository }}"
+          -var="github_repo=${{ github.repository }}" \
+          -var="user_email=${{ secrets.USER_EMAIL }}"
 
           
