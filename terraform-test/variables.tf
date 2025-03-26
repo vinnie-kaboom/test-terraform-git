@@ -22,6 +22,12 @@ variable "allowed_ssh_ranges" {
   default     = ["35.235.240.0/20"]  # IAP IP range
 }
 
+variable "service_account_email" {
+  description = "Email of the service account"
+  type        = string
+  default     = "workload-identity-sa@sylvan-apogee-450014-a6.iam.gserviceaccount.com"
+}
+
 variable "service_account_id" {
   description = "The ID of the service account"
   type        = string
@@ -89,4 +95,9 @@ variable "disk_encryption_key" {
   description = "KMS key for disk encryption"
   type        = string
   default     = null  # If you want to use default Google encryption
+}
+
+variable "user_email" {
+  description = "Email address of the user to grant permissions to"
+  type        = string
 }

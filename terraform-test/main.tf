@@ -35,53 +35,6 @@ resource "google_service_account" "bastion_service_account" {
   project      = var.project_id
 }
 
-# Add required roles to your user
-resource "google_project_iam_member" "user_roles" {
-  for_each = toset([
-    "roles/iam.workloadIdentityPoolAdmin",
-    "roles/iam.serviceAccountAdmin",
-    "roles/iam.securityAdmin"
-  ])
-  
-  project = var.project_id
-  role    = each.value
-  # Replace with your email
-  member  = "user:YOUR_EMAIL@gmail.com"
-}
-
-# Wait for permissions to propagate
-resource "time_sleep" "wait_for_permissions" {
-  depends_on = [google_project_iam_member.user_roles]
-  create_duration = "30s"
-}
-
-# Create Workload Identity Pool (now depends on permissions being set)
-resource "google_iam_workload_identity_pool" "main" {
-  depends_on = [time_sleep.wait_for_permissions]
-  workload_identity_pool_id = "github-actions-pool"
-  display_name             = "GitHub Actions Pool"
-  description              = "Identity pool for GitHub Actions"
-  project                  = var.project_id
-}
-
-# Create Workload Identity Provider
-resource "google_iam_workload_identity_pool_provider" "main" {
-  workload_identity_pool_id          = google_iam_workload_identity_pool.main.workload_identity_pool_id
-  workload_identity_pool_provider_id = "github-provider"
-  display_name                       = "GitHub Actions Provider"
-  project                           = var.project_id
-
-  attribute_mapping = {
-    "google.subject"       = "assertion.sub"
-    "attribute.actor"      = "assertion.actor"
-    "attribute.repository" = "assertion.repository"
-  }
-
-  oidc {
-    issuer_uri = "https://token.actions.githubusercontent.com"
-  }
-}
-
 # Create VPC Network
 resource "google_compute_network" "vpc_network" {
   name                    = "${var.project_id}-${var.network_name}"
@@ -134,7 +87,7 @@ resource "google_compute_instance" "vm_instance" {
   }
 
   service_account {
-    email  = google_service_account.bastion_service_account.email
+    email  = var.service_account_email
     scopes = ["cloud-platform"]
   }
 
@@ -204,11 +157,7 @@ output "vpc_network_details" {
   }
 }
 
-output "workload_identity_provider" {
-  value = "${google_iam_workload_identity_pool.main.name}/providers/${google_iam_workload_identity_pool_provider.main.workload_identity_pool_provider_id}"
-}
-
-# Example: If you have IAM bindings
+# Update the service account roles (make them dependent on service account creation)
 resource "google_project_iam_member" "service_account_roles" {
   for_each = toset([
     "roles/compute.instanceAdmin.v1",
@@ -218,5 +167,21 @@ resource "google_project_iam_member" "service_account_roles" {
   
   project = var.project_id
   role    = each.value
-  member  = "serviceAccount:${google_service_account.bastion_service_account.email}"
+  member  = "serviceAccount:${var.service_account_email}"
+
+  depends_on = [
+    google_service_account.bastion_service_account
+  ]
+}
+
+resource "google_project_iam_member" "user_roles" {
+  for_each = toset([
+    "roles/iam.workloadIdentityPoolAdmin",
+    "roles/iam.serviceAccountAdmin",
+    "roles/iam.securityAdmin"
+  ])
+  
+  project = var.project_id
+  role    = each.value
+  member  = "user:${var.user_email}"
 }

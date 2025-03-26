@@ -9,5 +9,6 @@ github_repo  = "vinnie-kaboom/test-terraform-git"
 iap_authorized_users = [
   "user:vincent.zamora@gmail.com"  
 ]
-service_account_id          = "workload-identity-sa"
-service_account_display_name = "Workload Identity Service Account"
+service_account_email = "workload-identity-sa@sylvan-apogee-450014-a6.iam.gserviceaccount.com"
+service_account_id    = "workload-identity-sa"
+user_email            = "vincent.zamora@gmail.com"
