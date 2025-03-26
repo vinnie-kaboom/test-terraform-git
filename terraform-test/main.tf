@@ -6,11 +6,6 @@ data "google_project_service" "iap" {
 provider "google" {
   project = var.project_id
   region  = var.region
-
-  timeouts {
-    create = "30m"
-    update = "30m"
-  }
 }
 
 # Enable required APIs
@@ -26,6 +21,11 @@ resource "google_project_service" "required_apis" {
   
   disable_dependent_services = false
   disable_on_destroy        = false
+
+  timeouts {
+    create = "30m"
+    update = "30m"
+  }
 }
 
 # Service Account
@@ -116,6 +116,10 @@ resource "google_iap_brand" "project_brand" {
     data.google_project_service.iap
   ]
 
+  timeouts {
+    create = "30m"
+  }
+
   lifecycle {
     prevent_destroy = true  # Prevent accidental deletion
   }
@@ -143,6 +147,12 @@ resource "google_compute_instance" "vm_instance" {
   machine_type = "e2-micro"
   zone         = var.zone
   depends_on   = [google_project_service.required_apis]
+
+  timeouts {
+    create = "30m"
+    update = "30m"
+    delete = "30m"
+  }
 
   tags = ["bastion-host"]
 
