@@ -28,6 +28,12 @@ variable "service_account_id" {
   default     = "workload-identity-sa"
 }
 
+variable "service_account_display_name" {
+  description = "Display name for the service account"
+  type        = string
+  default     = "Workload Identity Service Account"
+}
+
 variable "instance_name" {
   description = "Name of the bastion instance"
   type        = string
