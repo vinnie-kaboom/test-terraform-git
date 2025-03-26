@@ -11,7 +11,6 @@ provider "google" {
 # Enable required APIs
 resource "google_project_service" "required_apis" {
   for_each = toset([
-    "iap.googleapis.com",
     "compute.googleapis.com",
     "iam.googleapis.com"
   ])
@@ -28,48 +27,29 @@ resource "google_project_service" "required_apis" {
   }
 }
 
-# Service Account
+# Create service account
 resource "google_service_account" "service-account-1" {
   account_id   = var.service_account_id
   display_name = "Workload Identity Service Account"
   description  = "Service account for GitHub Actions Workload Identity"
-  depends_on   = [google_project_service.required_apis]
+  project      = var.project_id
 }
 
-# Grant necessary IAM roles
-resource "google_project_iam_member" "workload_identity_admin" {
-  project = var.project_id
-  role    = "roles/iam.serviceAccountUser"
-  member  = "serviceAccount:${google_service_account.service-account-1.email}"
-}
-
-# Add necessary IAM roles for the service account
-resource "google_project_iam_member" "service_account_roles" {
-  for_each = toset([
-    "roles/compute.instanceAdmin.v1",
-    "roles/iam.serviceAccountUser",
-    "roles/compute.networkAdmin"
-  ])
-  
-  project = var.project_id
-  role    = each.value
-  member  = "serviceAccount:${google_service_account.service-account-1.email}"
-}
-
-# Workload Identity Pool
+# Create Workload Identity Pool
 resource "google_iam_workload_identity_pool" "main" {
-  workload_identity_pool_id = var.workload_identity_pool_id
-  display_name              = "GitHub Actions Pool"
+  workload_identity_pool_id = "github-actions-pool"
+  display_name             = "GitHub Actions Pool"
   description              = "Identity pool for GitHub Actions"
-  depends_on               = [google_project_service.required_apis, google_project_iam_member.workload_identity_admin]
+  project                  = var.project_id
 }
 
-# Workload Identity Provider
+# Create Workload Identity Provider
 resource "google_iam_workload_identity_pool_provider" "main" {
   workload_identity_pool_id          = google_iam_workload_identity_pool.main.workload_identity_pool_id
-  workload_identity_pool_provider_id = var.provider_id
+  workload_identity_pool_provider_id = "github-provider"
   display_name                       = "GitHub Actions Provider"
-  
+  project                           = var.project_id
+
   attribute_mapping = {
     "google.subject"       = "assertion.sub"
     "attribute.actor"      = "assertion.actor"
@@ -83,110 +63,65 @@ resource "google_iam_workload_identity_pool_provider" "main" {
 
 # Create VPC Network
 resource "google_compute_network" "vpc_network" {
-  name                    = "${var.project_id}-vpc"
+  name                    = "${var.project_id}-${var.network_name}"
+  project                 = var.project_id
   auto_create_subnetworks = true
-  depends_on              = [google_project_service.required_apis]
-}
-
-# IAP firewall rule
-resource "google_compute_firewall" "iap-ssh" {
-  name    = "${var.project_id}-allow-iap-ssh"
-  network = google_compute_network.vpc_network.name
-  
-  allow {
-    protocol = "tcp"
-    ports    = ["22"]
-  }
-
-  # Only allow SSH from IAP's IP range
-  source_ranges = ["35.235.240.0/20"]  # Google's IAP range
-  target_tags   = ["bastion-host"]
-}
-
-# Remove or modify the previous SSH firewall rule to only allow IAP
-resource "google_compute_firewall" "bastion-ssh" {
-  name    = "${var.project_id}-allow-bastion-ssh"
-  network = google_compute_network.vpc_network.name
-
-  allow {
-    protocol = "tcp"
-    ports    = ["22"]
-  }
-
-  # Only allow SSH from internal IPs and IAP
-  source_ranges = concat(["35.235.240.0/20"], var.allowed_internal_ranges)
-  target_tags   = ["bastion-host"]
-}
-
-# IAP OAuth brand (required for IAP)
-resource "google_iap_brand" "project_brand" {
-  support_email     = var.support_email
-  application_title = "${var.project_id} Bastion Access"
-  project          = var.project_id
-  depends_on       = [
-    google_project_service.required_apis,
-    data.google_project_service.iap
-  ]
-
-  timeouts {
-    create = "30m"
-  }
 
   lifecycle {
-    prevent_destroy = true  # Prevent accidental deletion
+    prevent_destroy = false
   }
 }
 
-# IAP OAuth client
-resource "google_iap_client" "project_client" {
-  display_name = "Bastion IAP Client"
-  brand        = google_iap_brand.project_brand.name
+# Create firewall rule for SSH access
+resource "google_compute_firewall" "bastion-ssh" {
+  name    = "${var.project_id}-allow-${var.instance_name}-ssh"
+  network = google_compute_network.vpc_network.name
+  project = var.project_id
+
+  allow {
+    protocol = "tcp"
+    ports    = ["22"]
+  }
+
+  source_ranges = var.allowed_ssh_ranges
+  target_tags   = ["${var.instance_name}-host"]
+
+  log_config {
+    metadata = "INCLUDE_ALL_METADATA"
+  }
 }
 
-# IAP tunnel IAM binding
-resource "google_iap_tunnel_instance_iam_binding" "enable_iap" {
-  project  = var.project_id
-  zone     = var.zone
-  instance = google_compute_instance.vm_instance.name
-  role     = "roles/iap.tunnelResourceAccessor"
-  members  = var.iap_authorized_users
-  depends_on = [google_compute_instance.vm_instance, google_iap_brand.project_brand]
-}
-
-# Modify the VM instance with enhanced security
+# Create VM instance
 resource "google_compute_instance" "vm_instance" {
-  name         = "${var.project_id}-bastion"
-  machine_type = "e2-micro"
+  name         = "${var.project_id}-${var.instance_name}"
+  machine_type = var.machine_type
   zone         = var.zone
-  depends_on   = [google_project_service.required_apis]
+  project      = var.project_id
 
-  timeouts {
-    create = "30m"
-    update = "30m"
-    delete = "30m"
-  }
-
-  tags = ["bastion-host"]
+  tags = ["${var.instance_name}-host"]
 
   boot_disk {
     initialize_params {
       image = "debian-cloud/debian-11"
       size  = 10
-      type  = "pd-standard"
     }
   }
 
   network_interface {
     network = google_compute_network.vpc_network.name
-    access_config {
-    }
+    access_config {}
+  }
+
+  service_account {
+    email  = google_service_account.service-account-1.email
+    scopes = ["cloud-platform"]
   }
 
   metadata = {
-    enable-oslogin       = "TRUE"
-    enable-oslogin-2fa   = "TRUE"
+    enable-oslogin         = "TRUE"
+    enable-oslogin-2fa     = "TRUE"
     block-project-ssh-keys = "TRUE"
-    serial-port-enable   = "FALSE"
+    serial-port-enable     = "FALSE"
     enable-guest-attributes = "FALSE"
     
     startup-script = <<-EOT
@@ -196,31 +131,22 @@ resource "google_compute_instance" "vm_instance" {
         fail2ban \
         unattended-upgrades \
         apt-listchanges
-
+      
       echo 'Unattended-Upgrade::Automatic-Reboot "true";' >> /etc/apt/apt.conf.d/50unattended-upgrades
       echo 'Unattended-Upgrade::Automatic-Reboot-Time "02:00";' >> /etc/apt/apt.conf.d/50unattended-upgrades
-
+      
       sed -i 's/#PermitRootLogin yes/PermitRootLogin no/' /etc/ssh/sshd_config
       sed -i 's/PasswordAuthentication yes/PasswordAuthentication no/' /etc/ssh/sshd_config
       sed -i 's/#MaxAuthTries 6/MaxAuthTries 3/' /etc/ssh/sshd_config
-      
+            
       systemctl restart sshd
-
+      
       iptables -A INPUT -p tcp --dport 22 -j ACCEPT
       iptables -A INPUT -m state --state ESTABLISHED,RELATED -j ACCEPT
       iptables -P INPUT DROP
-      
+            
       DEBIAN_FRONTEND=noninteractive apt-get install -y iptables-persistent
     EOT
-  }
-
-  service_account {
-    email  = google_service_account.service-account-1.email
-    scopes = [
-      "https://www.googleapis.com/auth/cloud-platform",
-      "https://www.googleapis.com/auth/compute",
-      "https://www.googleapis.com/auth/servicecontrol"
-    ]
   }
 
   shielded_instance_config {
@@ -228,26 +154,20 @@ resource "google_compute_instance" "vm_instance" {
     enable_secure_boot         = true
     enable_vtpm               = true
   }
-}
 
-# Output the VM's IP address
-output "public_ip" {
-  value = google_compute_instance.vm_instance.network_interface[0].access_config[0].nat_ip
-}
+  depends_on = [
+    google_project_service.required_apis
+  ]
 
-# Output the Workload Identity Pool Provider ID
-output "workload_identity_provider" {
-  value = google_iam_workload_identity_pool_provider.main.name
-}
-
-# Output the service account email
-output "service_account_email" {
-  value = google_service_account.service-account-1.email
+  timeouts {
+    create = "30m"
+    delete = "30m"
+    update = "30m"
+  }
 }
 
 # Outputs
 output "vm_instance_details" {
-  description = "Details of the created VM instance"
   value = {
     name         = google_compute_instance.vm_instance.name
     machine_type = google_compute_instance.vm_instance.machine_type
@@ -257,36 +177,12 @@ output "vm_instance_details" {
 }
 
 output "vpc_network_details" {
-  description = "Details of the created VPC network"
   value = {
     name = google_compute_network.vpc_network.name
     id   = google_compute_network.vpc_network.id
   }
 }
 
-output "workload_identity_details" {
-  description = "Details of the Workload Identity configuration"
-  value = {
-    pool_name           = google_iam_workload_identity_pool.main.name
-    provider_name       = google_iam_workload_identity_pool_provider.main.name
-    service_account     = google_service_account.service-account-1.email
-  }
-}
-
-output "bastion_details" {
-  description = "Details of the bastion host"
-  value = {
-    name        = google_compute_instance.vm_instance.name
-    external_ip = google_compute_instance.vm_instance.network_interface[0].access_config[0].nat_ip
-    internal_ip = google_compute_instance.vm_instance.network_interface[0].network_ip
-    ssh_command = "gcloud compute ssh ${google_compute_instance.vm_instance.name} --zone=${var.zone}"
-  }
-}
-
-output "security_details" {
-  description = "Security-related details for the bastion host"
-  value = {
-    oslogin_enabled = true
-    shielded_vm     = true
-  }
+output "workload_identity_provider" {
+  value = "${google_iam_workload_identity_pool.main.name}/providers/${google_iam_workload_identity_pool_provider.main.workload_identity_pool_provider_id}"
 }
