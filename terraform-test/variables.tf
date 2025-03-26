@@ -1,6 +1,7 @@
 variable "project_id" {
   description = "The GCP project ID"
   type        = string
+  default     = "sylvan-apogee-450014-a6"
 }
 
 variable "region" {
@@ -9,10 +10,40 @@ variable "region" {
   default     = "us-central1"
 }
 
+variable "zone" {
+  description = "The GCP zone"
+  type        = string
+  default     = "us-central1-a"
+}
+
+variable "allowed_ssh_ranges" {
+  description = "List of IP ranges allowed to SSH to bastion"
+  type        = list(string)
+  default     = ["35.235.240.0/20"]  # IAP IP range
+}
+
 variable "service_account_id" {
   description = "The ID of the service account"
   type        = string
   default     = "workload-identity-sa"
+}
+
+variable "instance_name" {
+  description = "Name of the bastion instance"
+  type        = string
+  default     = "bastion"
+}
+
+variable "machine_type" {
+  description = "Machine type for the bastion instance"
+  type        = string
+  default     = "e2-micro"
+}
+
+variable "network_name" {
+  description = "Name of the VPC network"
+  type        = string
+  default     = "vpc"
 }
 
 variable "workload_identity_pool_id" {
@@ -30,18 +61,6 @@ variable "provider_id" {
 variable "github_repo" {
   description = "The GitHub repository in format 'owner/repo'"
   type        = string
-}
-
-variable "zone" {
-  description = "The GCP zone for the VM instance"
-  type        = string
-  default     = "us-central1-a"  # Default zone in us-central1 region
-}
-
-variable "allowed_ssh_ranges" {
-  description = "List of IP ranges allowed to SSH to bastion host"
-  type        = list(string)
-  default     = ["0.0.0.0/0"]  # WARNING: Change this to your specific IP ranges
 }
 
 variable "support_email" {
