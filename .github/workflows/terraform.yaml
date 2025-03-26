@@ -179,7 +179,9 @@ jobs:
       if: github.event.pull_request.merged == true
       run: |
         cd terraform-test
+        EMAIL="${{ secrets.AUTHORIZED_USER }}"
+        
         terraform apply -auto-approve \
           -var="support_email=${{ secrets.SUPPORT_EMAIL }}" \
-          -var='iap_authorized_users=["user:${{ secrets.AUTHORIZED_USER }}"]' \
+          -var="iap_authorized_users=[\"user:${EMAIL}\"]" \
           -var="github_repo=${{ github.repository }}"
