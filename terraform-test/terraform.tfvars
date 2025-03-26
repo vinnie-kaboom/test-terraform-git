@@ -11,4 +11,4 @@ iap_authorized_users = [
 ]
 service_account_email = "workload-identity-sa@sylvan-apogee-450014-a6.iam.gserviceaccount.com"
 service_account_id    = "workload-identity-sa"
-user_email            = "your.actual.email@gmail.com
+user_email            = "vincent.zamora@gmail.com"
