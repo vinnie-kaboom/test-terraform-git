@@ -1,6 +1,16 @@
+# Add this at the top of your main.tf
+data "google_project_service" "iap" {
+  service = "iap.googleapis.com"
+}
+
 provider "google" {
   project = var.project_id
   region  = var.region
+
+  timeouts {
+    create = "30m"
+    update = "30m"
+  }
 }
 
 # Enable required APIs
@@ -101,7 +111,14 @@ resource "google_iap_brand" "project_brand" {
   support_email     = var.support_email
   application_title = "${var.project_id} Bastion Access"
   project          = var.project_id
-  depends_on       = [google_project_service.required_apis]
+  depends_on       = [
+    google_project_service.required_apis,
+    data "google_project_service" "iap"
+  ]
+
+  lifecycle {
+    prevent_destroy = true  # Prevent accidental deletion
+  }
 }
 
 # IAP OAuth client
