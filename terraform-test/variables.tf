@@ -101,3 +101,9 @@ variable "user_email" {
   description = "Email address of the user to grant permissions to"
   type        = string
 }
+
+variable "allowed_ip_ranges" {
+  description = "List of IP ranges allowed to connect to bastion"
+  type        = list(string)
+  default     = []  # You'll set this in terraform.tfvars
+}

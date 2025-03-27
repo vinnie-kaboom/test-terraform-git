@@ -3,9 +3,19 @@ data "google_project_service" "iap" {
   service = "iap.googleapis.com"
 }
 
+terraform {
+  required_providers {
+    google = {
+      source  = "hashicorp/google"
+      version = "~> 4.0"
+    }
+  }
+}
+
 provider "google" {
   project = var.project_id
   region  = var.region
+  zone    = var.zone
 }
 
 # Enable required APIs
@@ -49,8 +59,13 @@ resource "google_compute_firewall" "bastion-ssh" {
     ports    = ["22"]
   }
 
-  source_ranges = var.allowed_ssh_ranges
-  target_tags   = ["bastion-host"]
+  # Allow both IAP and your IP
+  source_ranges = concat(
+    ["35.235.240.0/20"],  # IAP range
+    var.allowed_ip_ranges # Your IP ranges
+  )
+  
+  target_tags = ["bastion-host"]
 
   log_config {
     metadata = "INCLUDE_ALL_METADATA"
