@@ -6,14 +6,14 @@ on:
   pull_request:
     branches: [ main ]
 
+permissions:
+  contents: write
+  pull-requests: write
+
 jobs:
   terraform:
     name: 'Terraform'
     runs-on: ubuntu-latest
-    
-    permissions:
-      contents: write
-      pull-requests: write
 
     steps:
     - name: Checkout
@@ -22,7 +22,7 @@ jobs:
     - name: 'Auth to GCP'
       uses: 'google-github-actions/auth@v1'
       with:
-        credentials_json: '${{ secrets.GCP_SA_KEY }}'
+        credentials_json: '${{ secrets.GCP_SA_KEY }}'    # Changed back to credentials_json
 
     - name: 'Set up Cloud SDK'
       uses: 'google-github-actions/setup-gcloud@v1'
@@ -39,7 +39,6 @@ jobs:
       run: |
         cd terraform-test
         terraform init
-        # Show current directory and list files
         pwd
         ls -la
 
@@ -53,22 +52,11 @@ jobs:
       run: |
         cd terraform-test
         terraform apply -auto-approve
-        # Show state file location and content
-        echo "State file location:"
-        pwd
-        ls -la terraform.tfstate*
-        echo "State file content preview:"
-        head -n 5 terraform.tfstate
 
     - name: 'Commit and Push State'
       if: github.ref == 'refs/heads/main' && github.event_name == 'push'
       run: |
         cd terraform-test
-        # Show what we're about to commit
-        echo "Files to be committed:"
-        git status --porcelain
-        
-        # Commit and push state files if they exist
         if [[ -f terraform.tfstate && -n $(git status --porcelain terraform.tfstate) ]]; then
           git add terraform.tfstate
           git commit -m "Update Terraform state [skip ci]"
@@ -80,5 +68,4 @@ jobs:
           git commit -m "Update Terraform state backup [skip ci]"
           git push
         fi
-
           
