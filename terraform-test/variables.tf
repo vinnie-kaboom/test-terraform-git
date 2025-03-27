@@ -81,7 +81,7 @@ variable "support_email" {
 }
 
 variable "iap_authorized_users" {
-  description = "List of email addresses authorized to access the bastion via IAP"
+  description = "List of users authorized for IAP access (in format 'user:email@domain.com')"
   type        = list(string)
 }
 
