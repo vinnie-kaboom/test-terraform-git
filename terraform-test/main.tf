@@ -27,11 +27,10 @@ resource "google_project_service" "required_apis" {
   }
 }
 
-# Create service account
+# Create service account first
 resource "google_service_account" "bastion_service_account" {
-  account_id   = var.service_account_id
-  display_name = var.service_account_display_name
-  description  = "Service account for Bastion Host"
+  account_id   = "bastion-sa"
+  display_name = "Bastion Service Account"
   project      = var.project_id
 }
 
@@ -82,7 +81,9 @@ resource "google_compute_instance" "vm_instance" {
     access_config {}
   }
 
+  # Use the service account we created
   service_account {
+    email  = google_service_account.bastion_service_account.email
     scopes = ["cloud-platform"]
   }
 
@@ -125,7 +126,8 @@ resource "google_compute_instance" "vm_instance" {
   }
 
   depends_on = [
-    google_project_service.required_apis
+    google_project_service.required_apis,
+    google_service_account.bastion_service_account
   ]
 
   timeouts {
@@ -133,6 +135,19 @@ resource "google_compute_instance" "vm_instance" {
     delete = "30m"
     update = "30m"
   }
+}
+
+# Grant minimum required roles to the service account
+resource "google_project_iam_member" "service_account_roles" {
+  for_each = toset([
+    "roles/compute.viewer",
+    "roles/logging.logWriter",
+    "roles/monitoring.metricWriter"
+  ])
+  
+  project = var.project_id
+  role    = each.value
+  member  = "serviceAccount:${google_service_account.bastion_service_account.email}"
 }
 
 # Outputs
