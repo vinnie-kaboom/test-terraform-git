@@ -14,18 +14,12 @@ jobs:
   terraform:
     name: 'Terraform'
     runs-on: ubuntu-latest
+    env:
+      GOOGLE_CREDENTIALS: ${{ secrets.GCP_SA_KEY }}
 
     steps:
     - name: Checkout
       uses: actions/checkout@v2
-
-    - name: 'Auth to GCP'
-      uses: 'google-github-actions/auth@v1'
-      with:
-        credentials_json: '${{ secrets.GCP_SA_KEY }}'    # Changed back to credentials_json
-
-    - name: 'Set up Cloud SDK'
-      uses: 'google-github-actions/setup-gcloud@v1'
 
     - name: 'Setup Terraform'
       uses: hashicorp/setup-terraform@v1
