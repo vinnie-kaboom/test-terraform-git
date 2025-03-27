@@ -81,10 +81,13 @@ resource "google_compute_instance" "vm_instance" {
     access_config {}
   }
 
-  # Use the service account we created
+  # Use default compute service account with specific scopes
   service_account {
-    email  = google_service_account.bastion_service_account.email
-    scopes = ["cloud-platform"]
+    scopes = [
+      "https://www.googleapis.com/auth/logging.write",
+      "https://www.googleapis.com/auth/monitoring.write",
+      "https://www.googleapis.com/auth/compute.readonly"
+    ]
   }
 
   metadata = {
@@ -125,29 +128,11 @@ resource "google_compute_instance" "vm_instance" {
     enable_vtpm               = true
   }
 
-  depends_on = [
-    google_project_service.required_apis,
-    google_service_account.bastion_service_account
-  ]
-
   timeouts {
     create = "30m"
     delete = "30m"
     update = "30m"
   }
-}
-
-# Grant minimum required roles to the service account
-resource "google_project_iam_member" "service_account_roles" {
-  for_each = toset([
-    "roles/compute.viewer",
-    "roles/logging.logWriter",
-    "roles/monitoring.metricWriter"
-  ])
-  
-  project = var.project_id
-  role    = each.value
-  member  = "serviceAccount:${google_service_account.bastion_service_account.email}"
 }
 
 # Outputs
