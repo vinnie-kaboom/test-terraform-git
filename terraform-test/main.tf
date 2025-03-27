@@ -154,3 +154,4 @@ output "vpc_network_details" {
     id   = google_compute_network.vpc_network.id
   }
 }
+
