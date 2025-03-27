@@ -20,18 +20,15 @@ resource "google_project_service" "required_apis" {
   
   disable_dependent_services = false
   disable_on_destroy        = false
-
-  timeouts {
-    create = "30m"
-    update = "30m"
-  }
 }
 
-# Create service account first
-resource "google_service_account" "bastion_service_account" {
-  account_id   = "bastion-sa"
-  display_name = "Bastion Service Account"
+# Create a service account for the VM
+resource "google_service_account" "vm_service_account" {
+  account_id   = "bastion-vm-sa"
+  display_name = "Bastion VM Service Account"
   project      = var.project_id
+
+  depends_on = [google_project_service.required_apis]
 }
 
 # Create VPC Network
@@ -81,8 +78,9 @@ resource "google_compute_instance" "vm_instance" {
     access_config {}
   }
 
-  # Use default compute service account with specific scopes
+  # Use our created service account instead of the default one
   service_account {
+    email = google_service_account.vm_service_account.email
     scopes = [
       "https://www.googleapis.com/auth/logging.write",
       "https://www.googleapis.com/auth/monitoring.write",
@@ -127,6 +125,11 @@ resource "google_compute_instance" "vm_instance" {
     enable_secure_boot         = true
     enable_vtpm               = true
   }
+
+  depends_on = [
+    google_project_service.required_apis,
+    google_service_account.vm_service_account
+  ]
 
   timeouts {
     create = "30m"
