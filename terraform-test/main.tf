@@ -37,18 +37,14 @@ resource "google_service_account" "bastion_service_account" {
 
 # Create VPC Network
 resource "google_compute_network" "vpc_network" {
-  name                    = "${var.project_id}-${var.network_name}"
+  name                    = "${var.project_id}-vpc"
   project                 = var.project_id
   auto_create_subnetworks = true
-
-  lifecycle {
-    prevent_destroy = false
-  }
 }
 
 # Create firewall rule for SSH access
 resource "google_compute_firewall" "bastion-ssh" {
-  name    = "${var.project_id}-allow-${var.instance_name}-ssh"
+  name    = "${var.project_id}-allow-bastion-ssh"
   network = google_compute_network.vpc_network.name
   project = var.project_id
 
@@ -58,7 +54,7 @@ resource "google_compute_firewall" "bastion-ssh" {
   }
 
   source_ranges = var.allowed_ssh_ranges
-  target_tags   = ["${var.instance_name}-host"]
+  target_tags   = ["bastion-host"]
 
   log_config {
     metadata = "INCLUDE_ALL_METADATA"
@@ -67,12 +63,12 @@ resource "google_compute_firewall" "bastion-ssh" {
 
 # Create VM instance
 resource "google_compute_instance" "vm_instance" {
-  name         = "${var.project_id}-${var.instance_name}"
+  name         = "${var.project_id}-bastion"
   machine_type = var.machine_type
   zone         = var.zone
   project      = var.project_id
 
-  tags = ["${var.instance_name}-host"]
+  tags = ["bastion-host"]
 
   boot_disk {
     initialize_params {
@@ -87,7 +83,6 @@ resource "google_compute_instance" "vm_instance" {
   }
 
   service_account {
-    email  = var.service_account_email
     scopes = ["cloud-platform"]
   }
 
@@ -155,33 +150,4 @@ output "vpc_network_details" {
     name = google_compute_network.vpc_network.name
     id   = google_compute_network.vpc_network.id
   }
-}
-
-# Update the service account roles (make them dependent on service account creation)
-resource "google_project_iam_member" "service_account_roles" {
-  for_each = toset([
-    "roles/compute.instanceAdmin.v1",
-    "roles/compute.networkAdmin",
-    "roles/iam.serviceAccountUser"
-  ])
-  
-  project = var.project_id
-  role    = each.value
-  member  = "serviceAccount:${var.service_account_email}"
-
-  depends_on = [
-    google_service_account.bastion_service_account
-  ]
-}
-
-resource "google_project_iam_member" "user_roles" {
-  for_each = toset([
-    "roles/iam.workloadIdentityPoolAdmin",
-    "roles/iam.serviceAccountAdmin",
-    "roles/iam.securityAdmin"
-  ])
-  
-  project = var.project_id
-  role    = each.value
-  member  = var.iap_authorized_users[0]
 }
