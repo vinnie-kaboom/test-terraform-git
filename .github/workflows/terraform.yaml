@@ -8,19 +8,23 @@ on:
     branches: [ "main" ]
   
 permissions:
-  contents: read
+  contents: write  # Need write permission to commit state files
   id-token: write
 
 jobs:
   terraform:
     name: 'Terraform'
     runs-on: ubuntu-latest
+    env:
+      ENCRYPTION_PASSWORD: ${{ secrets.ENCRYPTION_PASSWORD }}  # Add encryption password
 
     steps:
     - name: Checkout
       uses: actions/checkout@v3
+      with:
+        ref: ${{ github.head_ref }}
+        fetch-depth: 0
 
-    # Initial auth with minimal secrets
     - name: 'Debug GitHub Context'
       run: |
         echo "=== GitHub Context Details ==="
@@ -51,6 +55,25 @@ jobs:
           exit 1
         fi
 
+    - name: 'Install GPG'
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y gpg
+
+    - name: 'Decrypt State File'
+      run: |
+        cd terraform-test
+        # Decrypt state file if it exists
+        if [[ -f terraform.tfstate.gpg ]]; then
+          gpg --quiet --batch --yes --decrypt --passphrase="$ENCRYPTION_PASSWORD" \
+              --output terraform.tfstate terraform.tfstate.gpg
+        fi
+        # Decrypt backup state file if it exists
+        if [[ -f terraform.tfstate.backup.gpg ]]; then
+          gpg --quiet --batch --yes --decrypt --passphrase="$ENCRYPTION_PASSWORD" \
+              --output terraform.tfstate.backup terraform.tfstate.backup.gpg
+        fi
+
     - name: 'Initial Auth to GCP'
       uses: 'google-github-actions/auth@v1'
       with:
@@ -58,7 +81,7 @@ jobs:
         service_account: '${{ secrets.INITIAL_SERVICE_ACCOUNT }}'
         token_format: 'access_token'
         create_credentials_file: true
-        project_id: 'sylvan-apogee-450014-a6'  # Add explicit project_id
+        project_id: 'sylvan-apogee-450014-a6'
 
     - name: 'Set up Cloud SDK'
       uses: 'google-github-actions/setup-gcloud@v1'
@@ -187,6 +210,39 @@ jobs:
           -var="github_repo=${{ github.repository }}" \
           -var="user_email=${{ secrets.USER_EMAIL }}"
 
+    - name: 'Encrypt and Commit State File'
+      if: github.event.pull_request.merged == true
+      run: |
+        cd terraform-test
+        
+        # Configure Git
+        git config --global user.name 'GitHub Actions Bot'
+        git config --global user.email 'github-actions[bot]@users.noreply.github.com'
+        
+        # Function to encrypt file
+        encrypt_file() {
+          local input=$1
+          local output=$1.gpg
+          if [[ -f $input ]]; then
+            gpg --batch --yes --passphrase="$ENCRYPTION_PASSWORD" \
+                --symmetric --cipher-algo AES256 \
+                --output $output $input
+            rm $input  # Remove unencrypted file
+            git add $output
+          fi
+        }
+        
+        # Encrypt state files
+        encrypt_file "terraform.tfstate"
+        encrypt_file "terraform.tfstate.backup"
+        
+        # Commit if there are changes
+        if git diff --staged --quiet; then
+          echo "No changes to commit"
+        else
+          git commit -m "Update encrypted Terraform state [skip ci]"
+          git push
+        fi
 
           
           
