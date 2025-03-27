@@ -183,5 +183,5 @@ resource "google_project_iam_member" "user_roles" {
   
   project = var.project_id
   role    = each.value
-  member  = "user:${var.user_email}"
+  member  = var.iap_authorized_users[0]
 }
