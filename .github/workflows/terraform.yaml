@@ -218,17 +218,9 @@ jobs:
         git config --global user.name 'GitHub Actions Bot'
         git config --global user.email 'github-actions[bot]@users.noreply.github.com'
         
-        # Stage any existing changes before rebase
-        git add .
-        git stash
-        
-        # Fetch and rebase
-        git fetch origin main
-        git rebase origin/main
-        
-        # Pop stashed changes
-        git stash pop
-        
+        # Clean any .terraform directories
+        rm -rf .terraform/
+
         # Function to encrypt file
         encrypt_file() {
           local input=$1
@@ -262,6 +254,13 @@ jobs:
         echo "Current directory contents after encryption:"
         ls -la
         
+        # Stage only the encrypted state files
+        git add terraform.tfstate.gpg terraform.tfstate.backup.gpg
+        
+        # Show what's being committed
+        echo "Files staged for commit:"
+        git status --short
+        
         # Commit and push with error handling
         if git diff --staged --quiet; then
           echo "No changes to commit"
@@ -269,8 +268,20 @@ jobs:
           echo "Committing encrypted state files..."
           git commit -m "Update encrypted Terraform state [skip ci]"
           
-          # Force push to main (since we're sure this is the state we want)
-          git push --force origin HEAD:main
+          # Fetch latest changes
+          git fetch origin main
+          
+          # Try to rebase
+          git rebase origin/main || {
+            echo "Rebase failed, using merge instead..."
+            git reset --soft HEAD^
+            git stash
+            git pull origin main
+            git stash pop
+          }
+          
+          # Push changes
+          git push origin HEAD:main
         fi
         
         # Debug: Final status
@@ -307,6 +318,14 @@ jobs:
           echo "Settings -> Secrets and variables -> Actions -> New repository secret"
           exit 1
         fi
+
+    - name: 'Cleanup'
+      if: always()
+      run: |
+        cd terraform-test
+        rm -rf .terraform/
+        rm -f .terraform.lock.hcl
+        echo "Cleanup completed"
 
           
           
