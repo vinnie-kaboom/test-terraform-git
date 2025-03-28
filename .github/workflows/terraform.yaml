@@ -218,9 +218,16 @@ jobs:
         git config --global user.name 'GitHub Actions Bot'
         git config --global user.email 'github-actions[bot]@users.noreply.github.com'
         
-        # Fetch the latest changes and rebase
+        # Stage any existing changes before rebase
+        git add .
+        git stash
+        
+        # Fetch and rebase
         git fetch origin main
         git rebase origin/main
+        
+        # Pop stashed changes
+        git stash pop
         
         # Function to encrypt file
         encrypt_file() {
@@ -243,9 +250,17 @@ jobs:
           fi
         }
         
+        # Debug: Show current directory state
+        echo "Current directory contents before encryption:"
+        ls -la
+        
         # Encrypt state files
         encrypt_file "terraform.tfstate"
         encrypt_file "terraform.tfstate.backup"
+        
+        # Debug: Show directory after encryption
+        echo "Current directory contents after encryption:"
+        ls -la
         
         # Commit and push with error handling
         if git diff --staged --quiet; then
@@ -254,13 +269,13 @@ jobs:
           echo "Committing encrypted state files..."
           git commit -m "Update encrypted Terraform state [skip ci]"
           
-          # Try to push, if it fails, pull and push again
-          if ! git push origin HEAD:main; then
-            echo "Push failed, trying to pull and push again..."
-            git pull --rebase origin main
-            git push origin HEAD:main
-          fi
+          # Force push to main (since we're sure this is the state we want)
+          git push --force origin HEAD:main
         fi
+        
+        # Debug: Final status
+        echo "Final git status:"
+        git status
 
     - name: 'Verify Secrets'
       run: |
