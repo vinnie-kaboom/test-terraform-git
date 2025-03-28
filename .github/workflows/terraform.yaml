@@ -214,16 +214,13 @@ jobs:
         echo "Terraform apply completed, checking for state files..."
         ls -la terraform.tfstate*
         
-        # Now encrypt the state files
-        if [[ -z "$ENCRYPTION_PASSWORD" ]]; then
-          echo "Error: ENCRYPTION_PASSWORD is not set"
-          echo "Please add the ENCRYPTION_PASSWORD secret to your GitHub repository"
-          exit 1
-        fi
-        
         # Configure Git
         git config --global user.name 'GitHub Actions Bot'
         git config --global user.email 'github-actions[bot]@users.noreply.github.com'
+        
+        # Fetch the latest changes and rebase
+        git fetch origin main
+        git rebase origin/main
         
         # Function to encrypt file
         encrypt_file() {
@@ -250,13 +247,19 @@ jobs:
         encrypt_file "terraform.tfstate"
         encrypt_file "terraform.tfstate.backup"
         
-        # Commit and push if there are changes
+        # Commit and push with error handling
         if git diff --staged --quiet; then
-          echo "No changes to state files"
+          echo "No changes to commit"
         else
           echo "Committing encrypted state files..."
           git commit -m "Update encrypted Terraform state [skip ci]"
-          git push origin HEAD:${GITHUB_REF#refs/heads/}
+          
+          # Try to push, if it fails, pull and push again
+          if ! git push origin HEAD:main; then
+            echo "Push failed, trying to pull and push again..."
+            git pull --rebase origin main
+            git push origin HEAD:main
+          fi
         fi
 
     - name: 'Verify Secrets'
