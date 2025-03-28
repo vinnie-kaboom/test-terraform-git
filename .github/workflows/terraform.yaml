@@ -198,28 +198,26 @@ jobs:
           -var="iap_authorized_users=[\"user:${EMAIL}\"]" \
           -var="github_repo=${{ github.repository }}"
 
-    - name: 'Terraform Apply'
+    - name: 'Terraform Apply and Encrypt State'
       if: github.event.pull_request.merged == true
       run: |
         cd terraform-test
         EMAIL="${{ secrets.AUTHORIZED_USER }}"
         
+        # First, apply the changes
         terraform apply -auto-approve \
           -var="support_email=${{ secrets.SUPPORT_EMAIL }}" \
           -var="iap_authorized_users=[\"user:${EMAIL}\"]" \
           -var="github_repo=${{ github.repository }}" \
           -var="user_email=${{ secrets.USER_EMAIL }}"
-
-    - name: 'Encrypt and Commit State File'
-      if: github.event.pull_request.merged == true
-      run: |
-        cd terraform-test
         
-        # Verify encryption password is set
+        echo "Terraform apply completed, checking for state files..."
+        ls -la terraform.tfstate*
+        
+        # Now encrypt the state files
         if [[ -z "$ENCRYPTION_PASSWORD" ]]; then
           echo "Error: ENCRYPTION_PASSWORD is not set"
           echo "Please add the ENCRYPTION_PASSWORD secret to your GitHub repository"
-          echo "Go to Settings -> Secrets and variables -> Actions -> New repository secret"
           exit 1
         fi
         
@@ -236,7 +234,7 @@ jobs:
             if gpg --batch --yes --passphrase="$ENCRYPTION_PASSWORD" \
                 --symmetric --cipher-algo AES256 \
                 --output $output $input; then
-              echo "✓ Encryption successful"
+              echo "✓ Encryption successful for $input"
               rm $input  # Remove unencrypted file
               git add $output
             else
@@ -248,25 +246,17 @@ jobs:
           fi
         }
         
-        # Test GPG setup
-        echo "Testing GPG configuration..."
-        echo "test" | gpg --batch --yes --passphrase="$ENCRYPTION_PASSWORD" \
-          --symmetric --cipher-algo AES256 \
-          --output test.gpg 2>/dev/null && \
-        rm test.gpg && \
-        echo "✓ GPG configuration is working" || \
-        (echo "✗ GPG configuration test failed" && exit 1)
-        
         # Encrypt state files
         encrypt_file "terraform.tfstate"
         encrypt_file "terraform.tfstate.backup"
         
-        # Commit if there are changes
+        # Commit and push if there are changes
         if git diff --staged --quiet; then
-          echo "No changes to commit"
+          echo "No changes to state files"
         else
+          echo "Committing encrypted state files..."
           git commit -m "Update encrypted Terraform state [skip ci]"
-          git push
+          git push origin HEAD:${GITHUB_REF#refs/heads/}
         fi
 
     - name: 'Verify Secrets'
