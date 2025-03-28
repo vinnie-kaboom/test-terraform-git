@@ -155,3 +155,10 @@ output "vpc_network_details" {
   }
 }
 
+terraform {
+  backend "gcs" {
+    bucket = "sylvan-apogee-450014-a6-terraform-state"
+    prefix = "terraform/state"
+  }
+}
+
