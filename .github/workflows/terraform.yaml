@@ -148,6 +148,14 @@ jobs:
           echo "Make sure the service account has the roles/iam.workloadIdentityUser role"
         fi
 
+    - name: 'Setup GCS Backend'
+      run: |
+        # Create the bucket if it doesn't exist
+        if ! gsutil ls gs://sylvan-apogee-450014-a6-terraform-state > /dev/null 2>&1; then
+          gsutil mb -p sylvan-apogee-450014-a6 gs://sylvan-apogee-450014-a6-terraform-state
+          gsutil versioning set on gs://sylvan-apogee-450014-a6-terraform-state
+        fi
+
     - name: 'Setup Terraform'
       uses: hashicorp/setup-terraform@v2
 
@@ -198,95 +206,17 @@ jobs:
           -var="iap_authorized_users=[\"user:${EMAIL}\"]" \
           -var="github_repo=${{ github.repository }}"
 
-    - name: 'Terraform Apply and Encrypt State'
+    - name: 'Terraform Apply'
       if: github.event.pull_request.merged == true
       run: |
         cd terraform-test
         EMAIL="${{ secrets.AUTHORIZED_USER }}"
         
-        # First, apply the changes
         terraform apply -auto-approve \
           -var="support_email=${{ secrets.SUPPORT_EMAIL }}" \
           -var="iap_authorized_users=[\"user:${EMAIL}\"]" \
           -var="github_repo=${{ github.repository }}" \
           -var="user_email=${{ secrets.USER_EMAIL }}"
-        
-        echo "Terraform apply completed, checking for state files..."
-        ls -la terraform.tfstate*
-        
-        # Configure Git
-        git config --global user.name 'GitHub Actions Bot'
-        git config --global user.email 'github-actions[bot]@users.noreply.github.com'
-        
-        # Clean any .terraform directories
-        rm -rf .terraform/
-
-        # Function to encrypt file
-        encrypt_file() {
-          local input=$1
-          local output=$1.gpg
-          if [[ -f $input ]]; then
-            echo "Encrypting $input..."
-            if gpg --batch --yes --passphrase="$ENCRYPTION_PASSWORD" \
-                --symmetric --cipher-algo AES256 \
-                --output $output $input; then
-              echo "✓ Encryption successful for $input"
-              rm $input  # Remove unencrypted file
-              git add $output
-            else
-              echo "✗ Encryption failed for $input"
-              exit 1
-            fi
-          else
-            echo "File $input not found, skipping encryption"
-          fi
-        }
-        
-        # Debug: Show current directory state
-        echo "Current directory contents before encryption:"
-        ls -la
-        
-        # Encrypt state files
-        encrypt_file "terraform.tfstate"
-        encrypt_file "terraform.tfstate.backup"
-        
-        # Debug: Show directory after encryption
-        echo "Current directory contents after encryption:"
-        ls -la
-        
-        # Stage only the encrypted state files
-        git add terraform.tfstate.gpg terraform.tfstate.backup.gpg
-        
-        # Show what's being committed
-        echo "Files staged for commit:"
-        git status --short
-        
-        # Commit and push with error handling
-        if git diff --staged --quiet; then
-          echo "No changes to commit"
-        else
-          echo "Committing encrypted state files..."
-          git commit -m "Update encrypted Terraform state [skip ci]"
-          
-          # Fetch latest changes
-          git fetch origin main
-          
-          # Try to rebase
-          git rebase origin/main || {
-            echo "Rebase failed, using merge instead..."
-            git reset --soft HEAD^
-            git stash
-            git pull origin main
-            git stash pop
-          }
-          
-          # Push changes
-          git push origin HEAD:main
-        fi
-        
-        # Debug: Final status
-        echo "Final git status:"
-        git status
 
     - name: 'Verify Secrets'
       run: |
