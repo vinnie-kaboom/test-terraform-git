@@ -1,0 +1,57 @@
+name: 'Terraform Destroy'
+
+on:
+  workflow_dispatch:  # Manual trigger
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  terraform:
+    name: 'Terraform Destroy'
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v3
+
+    - name: 'Initial Auth to GCP'
+      uses: 'google-github-actions/auth@v1'
+      with:
+        workload_identity_provider: '${{ secrets.INITIAL_WORKLOAD_IDENTITY_PROVIDER }}'
+        service_account: '${{ secrets.INITIAL_SERVICE_ACCOUNT }}'
+        token_format: 'access_token'
+        create_credentials_file: true
+        project_id: 'sylvan-apogee-450014-a6'
+
+    - name: 'Set up Cloud SDK'
+      uses: 'google-github-actions/setup-gcloud@v1'
+
+    - name: 'Setup Terraform'
+      uses: hashicorp/setup-terraform@v2
+
+    - name: 'Terraform Init'
+      run: |
+        cd terraform-test
+        terraform init
+
+    - name: 'Terraform Plan Destroy'
+      run: |
+        cd terraform-test
+        EMAIL="${{ secrets.AUTHORIZED_USER }}"
+        
+        terraform plan -destroy \
+          -var="support_email=${{ secrets.SUPPORT_EMAIL }}" \
+          -var="iap_authorized_users=[\"user:${EMAIL}\"]" \
+          -var="github_repo=${{ github.repository }}"
+
+    - name: 'Terraform Destroy'
+      run: |
+        cd terraform-test
+        EMAIL="${{ secrets.AUTHORIZED_USER }}"
+        
+        terraform destroy -auto-approve \
+          -var="support_email=${{ secrets.SUPPORT_EMAIL }}" \
+          -var="iap_authorized_users=[\"user:${EMAIL}\"]" \
+          -var="github_repo=${{ github.repository }}" 
