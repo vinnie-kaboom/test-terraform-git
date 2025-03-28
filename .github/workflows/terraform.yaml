@@ -215,6 +215,14 @@ jobs:
       run: |
         cd terraform-test
         
+        # Verify encryption password is set
+        if [[ -z "$ENCRYPTION_PASSWORD" ]]; then
+          echo "Error: ENCRYPTION_PASSWORD is not set"
+          echo "Please add the ENCRYPTION_PASSWORD secret to your GitHub repository"
+          echo "Go to Settings -> Secrets and variables -> Actions -> New repository secret"
+          exit 1
+        fi
+        
         # Configure Git
         git config --global user.name 'GitHub Actions Bot'
         git config --global user.email 'github-actions[bot]@users.noreply.github.com'
@@ -224,13 +232,30 @@ jobs:
           local input=$1
           local output=$1.gpg
           if [[ -f $input ]]; then
-            gpg --batch --yes --passphrase="$ENCRYPTION_PASSWORD" \
+            echo "Encrypting $input..."
+            if gpg --batch --yes --passphrase="$ENCRYPTION_PASSWORD" \
                 --symmetric --cipher-algo AES256 \
-                --output $output $input
-            rm $input  # Remove unencrypted file
-            git add $output
+                --output $output $input; then
+              echo "✓ Encryption successful"
+              rm $input  # Remove unencrypted file
+              git add $output
+            else
+              echo "✗ Encryption failed for $input"
+              exit 1
+            fi
+          else
+            echo "File $input not found, skipping encryption"
           fi
         }
+        
+        # Test GPG setup
+        echo "Testing GPG configuration..."
+        echo "test" | gpg --batch --yes --passphrase="$ENCRYPTION_PASSWORD" \
+          --symmetric --cipher-algo AES256 \
+          --output test.gpg 2>/dev/null && \
+        rm test.gpg && \
+        echo "✓ GPG configuration is working" || \
+        (echo "✗ GPG configuration test failed" && exit 1)
         
         # Encrypt state files
         encrypt_file "terraform.tfstate"
@@ -242,6 +267,37 @@ jobs:
         else
           git commit -m "Update encrypted Terraform state [skip ci]"
           git push
+        fi
+
+    - name: 'Verify Secrets'
+      run: |
+        echo "Checking required secrets..."
+        
+        check_secret() {
+          local secret_name=$1
+          local secret_value=$2
+          if [[ -z "$secret_value" ]]; then
+            echo "✗ $secret_name is not set"
+            return 1
+          else
+            echo "✓ $secret_name is set"
+            return 0
+          fi
+        }
+        
+        errors=0
+        
+        check_secret "ENCRYPTION_PASSWORD" "${{ secrets.ENCRYPTION_PASSWORD }}" || ((errors++))
+        check_secret "INITIAL_WORKLOAD_IDENTITY_PROVIDER" "${{ secrets.INITIAL_WORKLOAD_IDENTITY_PROVIDER }}" || ((errors++))
+        check_secret "INITIAL_SERVICE_ACCOUNT" "${{ secrets.INITIAL_SERVICE_ACCOUNT }}" || ((errors++))
+        check_secret "AUTHORIZED_USER" "${{ secrets.AUTHORIZED_USER }}" || ((errors++))
+        check_secret "SUPPORT_EMAIL" "${{ secrets.SUPPORT_EMAIL }}" || ((errors++))
+        
+        if [[ $errors -gt 0 ]]; then
+          echo "Error: Missing required secrets"
+          echo "Please add all required secrets in GitHub repository settings"
+          echo "Settings -> Secrets and variables -> Actions -> New repository secret"
+          exit 1
         fi
 
           
