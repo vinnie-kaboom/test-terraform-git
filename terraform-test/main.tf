@@ -159,28 +159,54 @@ resource "null_resource" "ssh_key_setup" {
 
   provisioner "local-exec" {
     command = <<-EOT
+      #!/bin/bash
       # Generate SSH key if it doesn't exist
-      if (-not (Test-Path ${var.ssh_key_path})) {
-        ssh-keygen -t rsa -b 4096 -f ${var.ssh_key_path} -N '""'
-      }
+      if [ ! -f ~/.ssh/google_compute_engine ]; then
+        mkdir -p ~/.ssh
+        ssh-keygen -t rsa -b 4096 -f ~/.ssh/google_compute_engine -N ''
+      fi
       
       # Add key to OS Login
-      gcloud compute os-login ssh-keys add --key-file=${var.ssh_key_path}.pub
+      gcloud compute os-login ssh-keys add --key-file=~/.ssh/google_compute_engine.pub
       
       # Get OS Login username
-      $OS_LOGIN_USER = gcloud compute os-login describe-profile --format='get(posixAccounts[0].username)'
+      OS_LOGIN_USER=$(gcloud compute os-login describe-profile --format='get(posixAccounts[0].username)')
       
       # Output connection information
-      Write-Output "VM IP: ${google_compute_instance.vm_instance.network_interface[0].access_config[0].nat_ip}"
-      Write-Output "OS Login username: $OS_LOGIN_USER"
-      Write-Output "SSH command: ssh -i ${var.ssh_key_path} $OS_LOGIN_USER@${google_compute_instance.vm_instance.network_interface[0].access_config[0].nat_ip}"
+      echo "VM IP: ${google_compute_instance.vm_instance.network_interface[0].access_config[0].nat_ip}"
+      echo "OS Login username: $OS_LOGIN_USER"
+      echo "SSH command: ssh -i ~/.ssh/google_compute_engine $OS_LOGIN_USER@${google_compute_instance.vm_instance.network_interface[0].access_config[0].nat_ip}"
     EOT
-    interpreter = ["PowerShell", "-Command"]
   }
 
   depends_on = [
     google_compute_instance.vm_instance
   ]
+}
+
+# Update the cleanup resource to use bash
+resource "null_resource" "cleanup" {
+  triggers = {
+    instance_id = google_compute_instance.vm_instance.id
+    ssh_key_path = "~/.ssh/google_compute_engine"
+  }
+
+  provisioner "local-exec" {
+    when = destroy
+    command = <<-EOT
+      #!/bin/bash
+      # Remove OS Login SSH keys
+      gcloud compute os-login ssh-keys list | while read -r line; do
+        if [[ $line =~ fingerprint:[[:space:]](.*) ]]; then
+          gcloud compute os-login ssh-keys remove --key="${BASH_REMATCH[1]}"
+        fi
+      done
+      
+      # Remove local SSH keys
+      rm -f ${self.triggers.ssh_key_path}
+      rm -f ${self.triggers.ssh_key_path}.pub
+    EOT
+  }
 }
 
 # Outputs
