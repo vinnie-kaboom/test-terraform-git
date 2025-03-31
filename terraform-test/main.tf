@@ -91,7 +91,7 @@ resource "google_compute_instance" "vm_instance" {
   metadata = {
     enable-oslogin         = "TRUE"
     enable-oslogin-2fa     = "TRUE"
-    security-key-enforce-2fa = "TRUE"  # Forces security key/authenticator app
+    security-key-enforce-2fa = "TRUE"
     block-project-ssh-keys = "TRUE"
     serial-port-enable     = "FALSE"
     enable-guest-attributes = "FALSE"
@@ -102,32 +102,29 @@ resource "google_compute_instance" "vm_instance" {
       apt-get install -y \
         fail2ban \
         unattended-upgrades \
-        apt-listchanges
+        apt-listchanges \
+        libpam-google-authenticator
       
+      # Configure automatic updates
       echo 'Unattended-Upgrade::Automatic-Reboot "true";' >> /etc/apt/apt.conf.d/50unattended-upgrades
       echo 'Unattended-Upgrade::Automatic-Reboot-Time "02:00";' >> /etc/apt/apt.conf.d/50unattended-upgrades
       
+      # Configure SSH
       sed -i 's/#PermitRootLogin yes/PermitRootLogin no/' /etc/ssh/sshd_config
       sed -i 's/PasswordAuthentication yes/PasswordAuthentication no/' /etc/ssh/sshd_config
       sed -i 's/#MaxAuthTries 6/MaxAuthTries 3/' /etc/ssh/sshd_config
-            
-      systemctl restart sshd
-      
-      iptables -A INPUT -p tcp --dport 22 -j ACCEPT
-      iptables -A INPUT -m state --state ESTABLISHED,RELATED -j ACCEPT
-      iptables -P INPUT DROP
-            
-      DEBIAN_FRONTEND=noninteractive apt-get install -y iptables-persistent
-      
-      # Additional 2FA setup
-      apt-get install -y libpam-google-authenticator
+      sed -i 's/ChallengeResponseAuthentication no/ChallengeResponseAuthentication yes/' /etc/ssh/sshd_config
+      echo "AuthenticationMethods publickey,keyboard-interactive" >> /etc/ssh/sshd_config
       
       # Configure PAM for 2FA
       echo "auth required pam_google_authenticator.so" >> /etc/pam.d/sshd
       
-      # Update SSHD config
-      sed -i 's/ChallengeResponseAuthentication no/ChallengeResponseAuthentication yes/' /etc/ssh/sshd_config
-      echo "AuthenticationMethods publickey,keyboard-interactive" >> /etc/ssh/sshd_config
+      # Configure firewall
+      iptables -A INPUT -p tcp --dport 22 -j ACCEPT
+      iptables -A INPUT -m state --state ESTABLISHED,RELATED -j ACCEPT
+      iptables -P INPUT DROP
+      
+      DEBIAN_FRONTEND=noninteractive apt-get install -y iptables-persistent
       
       systemctl restart sshd
     EOT
@@ -151,7 +148,7 @@ resource "google_compute_instance" "vm_instance" {
   }
 }
 
-# Generate SSH key and configure OS Login
+# SSH key setup resource
 resource "null_resource" "ssh_key_setup" {
   triggers = {
     instance_id = google_compute_instance.vm_instance.id
@@ -159,23 +156,31 @@ resource "null_resource" "ssh_key_setup" {
 
   provisioner "local-exec" {
     command = <<-EOT
+      #!/bin/bash
+      set -e
+      
+      # Create .ssh directory if it doesn't exist
+      mkdir -p ~/.ssh
+      chmod 700 ~/.ssh
+      
       # Generate SSH key if it doesn't exist
-      if (-not (Test-Path ${var.ssh_key_path})) {
-        ssh-keygen -t rsa -b 4096 -f ${var.ssh_key_path} -N '""'
-      }
+      if [ ! -f ~/.ssh/google_compute_engine ]; then
+        ssh-keygen -t rsa -b 4096 -f ~/.ssh/google_compute_engine -N ''
+        chmod 600 ~/.ssh/google_compute_engine
+        chmod 644 ~/.ssh/google_compute_engine.pub
+      fi
       
       # Add key to OS Login
-      gcloud compute os-login ssh-keys add --key-file=${var.ssh_key_path}.pub
+      gcloud compute os-login ssh-keys add --key-file=~/.ssh/google_compute_engine.pub
       
-      # Get OS Login username
-      $OS_LOGIN_USER = gcloud compute os-login describe-profile --format='get(posixAccounts[0].username)'
+      # Get OS Login username and save it
+      OS_LOGIN_USER=$(gcloud compute os-login describe-profile --format='get(posixAccounts[0].username)')
+      echo "$OS_LOGIN_USER" > ~/.ssh/os_login_user
       
       # Output connection information
-      Write-Output "VM IP: ${google_compute_instance.vm_instance.network_interface[0].access_config[0].nat_ip}"
-      Write-Output "OS Login username: $OS_LOGIN_USER"
-      Write-Output "SSH command: ssh -i ${var.ssh_key_path} $OS_LOGIN_USER@${google_compute_instance.vm_instance.network_interface[0].access_config[0].nat_ip}"
+      echo "VM_IP=${google_compute_instance.vm_instance.network_interface[0].access_config[0].nat_ip}" > ~/.ssh/vm_connection_info
+      echo "OS_LOGIN_USER=$OS_LOGIN_USER" >> ~/.ssh/vm_connection_info
     EOT
-    interpreter = ["PowerShell", "-Command"]
   }
 
   depends_on = [
@@ -183,18 +188,47 @@ resource "null_resource" "ssh_key_setup" {
   ]
 }
 
-# Outputs
+# Single cleanup resource
+resource "null_resource" "cleanup" {
+  triggers = {
+    instance_id = google_compute_instance.vm_instance.id
+  }
+
+  provisioner "local-exec" {
+    when = destroy
+    command = <<-EOT
+      #!/bin/bash
+      set -e
+      
+      # Remove OS Login SSH keys
+      if [ -f ~/.ssh/google_compute_engine.pub ]; then
+        FINGERPRINT=$(ssh-keygen -lf ~/.ssh/google_compute_engine.pub | awk '{print $2}')
+        if [ ! -z "$FINGERPRINT" ]; then
+          gcloud compute os-login ssh-keys remove --key="$FINGERPRINT" || true
+        fi
+      fi
+      
+      # Clean up local files
+      rm -f ~/.ssh/google_compute_engine*
+      rm -f ~/.ssh/os_login_user
+      rm -f ~/.ssh/vm_connection_info
+    EOT
+  }
+}
+
+# Single output block
 output "connection_details" {
   value = {
     instance_name = google_compute_instance.vm_instance.name
     public_ip     = google_compute_instance.vm_instance.network_interface[0].access_config[0].nat_ip
     zone          = google_compute_instance.vm_instance.zone
-    ssh_key_path  = var.ssh_key_path
+    ssh_key_path  = "~/.ssh/google_compute_engine"
     setup_instructions = <<-EOT
       1. Install Google Authenticator app on your phone
-      2. Run: gcloud compute ssh ${google_compute_instance.vm_instance.name} --zone=${var.zone}
-      3. Follow the 2FA setup prompts
-      4. Future connections: ssh -i ${var.ssh_key_path} $OS_LOGIN_USER@${google_compute_instance.vm_instance.network_interface[0].access_config[0].nat_ip}
+      2. Wait a few minutes for the VM to complete its startup script
+      3. SSH into the VM using: ssh -i ~/.ssh/google_compute_engine $(cat ~/.ssh/os_login_user)@${google_compute_instance.vm_instance.network_interface[0].access_config[0].nat_ip}
+      4. On first login, you'll set up 2FA
+      5. Future logins will require both SSH key and 2FA code
     EOT
   }
 }
