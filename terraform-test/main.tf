@@ -216,7 +216,7 @@ resource "null_resource" "cleanup" {
   }
 }
 
-# Consolidated outputs
+# Single output block
 output "connection_details" {
   value = {
     instance_name = google_compute_instance.vm_instance.name
