@@ -98,6 +98,11 @@ variable "disk_encryption_key" {
 }
 
 variable "user_email" {
-  description = "Email address of the user to grant permissions to"
+  description = "User email for OS Login"
   type        = string
+}
+
+variable "ssh_key_path" {
+  description = "Path to save the generated SSH key"
+  default     = "~/.ssh/google_compute_engine"
 }
