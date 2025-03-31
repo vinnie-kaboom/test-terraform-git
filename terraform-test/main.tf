@@ -91,6 +91,7 @@ resource "google_compute_instance" "vm_instance" {
   metadata = {
     enable-oslogin         = "TRUE"
     enable-oslogin-2fa     = "TRUE"
+    security-key-enforce-2fa = "TRUE"  # Forces security key/authenticator app
     block-project-ssh-keys = "TRUE"
     serial-port-enable     = "FALSE"
     enable-guest-attributes = "FALSE"
@@ -117,6 +118,18 @@ resource "google_compute_instance" "vm_instance" {
       iptables -P INPUT DROP
             
       DEBIAN_FRONTEND=noninteractive apt-get install -y iptables-persistent
+      
+      # Additional 2FA setup
+      apt-get install -y libpam-google-authenticator
+      
+      # Configure PAM for 2FA
+      echo "auth required pam_google_authenticator.so" >> /etc/pam.d/sshd
+      
+      # Update SSHD config
+      sed -i 's/ChallengeResponseAuthentication no/ChallengeResponseAuthentication yes/' /etc/ssh/sshd_config
+      echo "AuthenticationMethods publickey,keyboard-interactive" >> /etc/ssh/sshd_config
+      
+      systemctl restart sshd
     EOT
   }
 
@@ -138,13 +151,51 @@ resource "google_compute_instance" "vm_instance" {
   }
 }
 
+# Generate SSH key and configure OS Login
+resource "null_resource" "ssh_key_setup" {
+  triggers = {
+    instance_id = google_compute_instance.vm_instance.id
+  }
+
+  provisioner "local-exec" {
+    command = <<-EOT
+      # Generate SSH key if it doesn't exist
+      if (-not (Test-Path ${var.ssh_key_path})) {
+        ssh-keygen -t rsa -b 4096 -f ${var.ssh_key_path} -N '""'
+      }
+      
+      # Add key to OS Login
+      gcloud compute os-login ssh-keys add --key-file=${var.ssh_key_path}.pub
+      
+      # Get OS Login username
+      $OS_LOGIN_USER = gcloud compute os-login describe-profile --format='get(posixAccounts[0].username)'
+      
+      # Output connection information
+      Write-Output "VM IP: ${google_compute_instance.vm_instance.network_interface[0].access_config[0].nat_ip}"
+      Write-Output "OS Login username: $OS_LOGIN_USER"
+      Write-Output "SSH command: ssh -i ${var.ssh_key_path} $OS_LOGIN_USER@${google_compute_instance.vm_instance.network_interface[0].access_config[0].nat_ip}"
+    EOT
+    interpreter = ["PowerShell", "-Command"]
+  }
+
+  depends_on = [
+    google_compute_instance.vm_instance
+  ]
+}
+
 # Outputs
-output "vm_instance_details" {
+output "connection_details" {
   value = {
-    name         = google_compute_instance.vm_instance.name
-    machine_type = google_compute_instance.vm_instance.machine_type
-    zone         = google_compute_instance.vm_instance.zone
-    public_ip    = google_compute_instance.vm_instance.network_interface[0].access_config[0].nat_ip
+    instance_name = google_compute_instance.vm_instance.name
+    public_ip     = google_compute_instance.vm_instance.network_interface[0].access_config[0].nat_ip
+    zone          = google_compute_instance.vm_instance.zone
+    ssh_key_path  = var.ssh_key_path
+    setup_instructions = <<-EOT
+      1. Install Google Authenticator app on your phone
+      2. Run: gcloud compute ssh ${google_compute_instance.vm_instance.name} --zone=${var.zone}
+      3. Follow the 2FA setup prompts
+      4. Future connections: ssh -i ${var.ssh_key_path} $OS_LOGIN_USER@${google_compute_instance.vm_instance.network_interface[0].access_config[0].nat_ip}
+    EOT
   }
 }
 
