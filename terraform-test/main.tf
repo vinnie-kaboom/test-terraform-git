@@ -331,11 +331,11 @@ resource "google_project_iam_member" "iap_tunnel_user" {
   member  = "serviceAccount:${google_service_account.vm_service_account.email}"
 }
 
-# Add IAP Admin role to allow managing IAP settings
-resource "google_project_iam_member" "iap_admin" {
+# Add IAP security configuration
+resource "google_project_iam_member" "iap_security_admin" {
   project = var.project_id
-  role    = "roles/iap.admin"
-  member  = "user:${var.user_email}"
+  role    = "roles/compute.securityAdmin"
+  member  = "serviceAccount:${google_service_account.vm_service_account.email}"
 }
 
 terraform {

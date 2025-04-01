@@ -17,6 +17,11 @@ jobs:
     runs-on: ubuntu-latest
     env:
       ENCRYPTION_PASSWORD: ${{ secrets.ENCRYPTION_PASSWORD }}  # Add encryption password
+    environment: production
+
+    defaults:
+      run:
+        shell: bash
 
     steps:
     - name: Checkout
@@ -217,8 +222,7 @@ jobs:
         terraform apply -auto-approve \
           -var="support_email=${{ secrets.SUPPORT_EMAIL }}" \
           -var="iap_authorized_users=[\"user:${EMAIL}\"]" \
-          -var="github_repo=${{ github.repository }}" \
-          -var="user_email=${{ secrets.USER_EMAIL }}"
+          -var="github_repo=${{ github.repository }}"
 
     - name: 'Verify Secrets'
       run: |
