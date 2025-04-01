@@ -148,7 +148,19 @@ resource "google_compute_instance" "vm_instance" {
   }
 }
 
-# SSH key setup resource
+# Add this resource to create a bucket for SSH keys
+resource "google_storage_bucket" "ssh_keys_bucket" {
+  name          = "${var.project_id}-ssh-keys"
+  location      = var.region
+  force_destroy = true  # Allows deletion of bucket with contents
+
+  uniform_bucket_level_access = true
+  
+  versioning {
+    enabled = true  # Enables versioning for recovery
+  }
+}
+
 resource "null_resource" "ssh_key_setup" {
   triggers = {
     instance_id = google_compute_instance.vm_instance.id
@@ -159,39 +171,62 @@ resource "null_resource" "ssh_key_setup" {
       #!/bin/bash
       set -e
       
-      # Create .ssh directory if it doesn't exist
-      mkdir -p ~/.ssh
-      chmod 700 ~/.ssh
+      # Set up paths
+      SSH_DIR="/home/runner/.ssh"
+      KEY_PATH="$SSH_DIR/google_compute_engine"
+      BUCKET_NAME="${var.project_id}-ssh-keys"
       
-      # Generate SSH key if it doesn't exist
-      if [ ! -f ~/.ssh/google_compute_engine ]; then
-        ssh-keygen -t rsa -b 4096 -f ~/.ssh/google_compute_engine -N ''
-        chmod 600 ~/.ssh/google_compute_engine
-        chmod 644 ~/.ssh/google_compute_engine.pub
+      # Create .ssh directory
+      mkdir -p "$SSH_DIR"
+      chmod 700 "$SSH_DIR"
+      
+      # Check if keys exist in bucket first
+      if gsutil -q stat "gs://$BUCKET_NAME/google_compute_engine"; then
+        echo "Downloading existing keys from bucket..."
+        gsutil cp "gs://$BUCKET_NAME/google_compute_engine" "$KEY_PATH"
+        gsutil cp "gs://$BUCKET_NAME/google_compute_engine.pub" "$KEY_PATH.pub"
+        chmod 600 "$KEY_PATH"
+        chmod 644 "$KEY_PATH.pub"
+      else
+        echo "Generating new SSH keys..."
+        ssh-keygen -t rsa -b 4096 -f "$KEY_PATH" -N ''
+        chmod 600 "$KEY_PATH"
+        chmod 644 "$KEY_PATH.pub"
+        
+        # Upload new keys to bucket
+        gsutil cp "$KEY_PATH" "gs://$BUCKET_NAME/google_compute_engine"
+        gsutil cp "$KEY_PATH.pub" "gs://$BUCKET_NAME/google_compute_engine.pub"
       fi
       
       # Add key to OS Login
-      gcloud compute os-login ssh-keys add --key-file=~/.ssh/google_compute_engine.pub
+      gcloud compute os-login ssh-keys add --key-file="$KEY_PATH.pub"
       
       # Get OS Login username and save it
       OS_LOGIN_USER=$(gcloud compute os-login describe-profile --format='get(posixAccounts[0].username)')
-      echo "$OS_LOGIN_USER" > ~/.ssh/os_login_user
+      echo "$OS_LOGIN_USER" > "$SSH_DIR/os_login_user"
       
-      # Output connection information
-      echo "VM_IP=${google_compute_instance.vm_instance.network_interface[0].access_config[0].nat_ip}" > ~/.ssh/vm_connection_info
-      echo "OS_LOGIN_USER=$OS_LOGIN_USER" >> ~/.ssh/vm_connection_info
+      # Save connection info
+      echo "VM_IP=${google_compute_instance.vm_instance.network_interface[0].access_config[0].nat_ip}" > "$SSH_DIR/vm_connection_info"
+      echo "OS_LOGIN_USER=$OS_LOGIN_USER" >> "$SSH_DIR/vm_connection_info"
+      
+      # Upload connection info to bucket
+      gsutil cp "$SSH_DIR/os_login_user" "gs://$BUCKET_NAME/os_login_user"
+      gsutil cp "$SSH_DIR/vm_connection_info" "gs://$BUCKET_NAME/vm_connection_info"
     EOT
   }
 
   depends_on = [
-    google_compute_instance.vm_instance
+    google_compute_instance.vm_instance,
+    google_storage_bucket.ssh_keys_bucket
   ]
 }
 
-# Single cleanup resource
 resource "null_resource" "cleanup" {
   triggers = {
-    instance_id = google_compute_instance.vm_instance.id
+    instance_id  = google_compute_instance.vm_instance.id
+    bucket_name  = "${var.project_id}-ssh-keys"  # Store bucket name in triggers
+    ssh_dir     = "/home/runner/.ssh"
+    key_path    = "/home/runner/.ssh/google_compute_engine"
   }
 
   provisioner "local-exec" {
@@ -200,35 +235,58 @@ resource "null_resource" "cleanup" {
       #!/bin/bash
       set -e
       
+      SSH_DIR="${self.triggers.ssh_dir}"
+      KEY_PATH="${self.triggers.key_path}"
+      BUCKET_NAME="${self.triggers.bucket_name}"
+      
       # Remove OS Login SSH keys
-      if [ -f ~/.ssh/google_compute_engine.pub ]; then
-        FINGERPRINT=$(ssh-keygen -lf ~/.ssh/google_compute_engine.pub | awk '{print $2}')
+      if [ -f "$KEY_PATH.pub" ]; then
+        FINGERPRINT=$(ssh-keygen -lf "$KEY_PATH.pub" | awk '{print $2}')
         if [ ! -z "$FINGERPRINT" ]; then
           gcloud compute os-login ssh-keys remove --key="$FINGERPRINT" || true
         fi
       fi
       
       # Clean up local files
-      rm -f ~/.ssh/google_compute_engine*
-      rm -f ~/.ssh/os_login_user
-      rm -f ~/.ssh/vm_connection_info
+      rm -f "$KEY_PATH"*
+      rm -f "$SSH_DIR/os_login_user"
+      rm -f "$SSH_DIR/vm_connection_info"
+      
+      # Note: The bucket and its contents will be automatically deleted
+      # due to force_destroy = true in the bucket configuration
     EOT
   }
 }
 
-# Single output block
+# Add outputs to show bucket information
+output "ssh_keys_bucket" {
+  value = {
+    name     = google_storage_bucket.ssh_keys_bucket.name
+    location = google_storage_bucket.ssh_keys_bucket.location
+    url      = "gs://${google_storage_bucket.ssh_keys_bucket.name}"
+  }
+}
+
 output "connection_details" {
   value = {
-    instance_name = google_compute_instance.vm_instance.name
-    public_ip     = google_compute_instance.vm_instance.network_interface[0].access_config[0].nat_ip
-    zone          = google_compute_instance.vm_instance.zone
-    ssh_key_path  = "~/.ssh/google_compute_engine"
+    instance_name      = google_compute_instance.vm_instance.name
+    public_ip         = google_compute_instance.vm_instance.network_interface[0].access_config[0].nat_ip
+    zone              = google_compute_instance.vm_instance.zone
+    ssh_key_path      = "/home/runner/.ssh/google_compute_engine"
+    bucket_path       = "gs://${google_storage_bucket.ssh_keys_bucket.name}"
     setup_instructions = <<-EOT
-      1. Install Google Authenticator app on your phone
-      2. Wait a few minutes for the VM to complete its startup script
-      3. SSH into the VM using: ssh -i ~/.ssh/google_compute_engine $(cat ~/.ssh/os_login_user)@${google_compute_instance.vm_instance.network_interface[0].access_config[0].nat_ip}
-      4. On first login, you'll set up 2FA
-      5. Future logins will require both SSH key and 2FA code
+      1. Download SSH keys from bucket:
+         gsutil cp gs://${google_storage_bucket.ssh_keys_bucket.name}/google_compute_engine* ~/.ssh/
+         chmod 600 ~/.ssh/google_compute_engine
+         chmod 644 ~/.ssh/google_compute_engine.pub
+      
+      2. Get connection details:
+         gsutil cat gs://${google_storage_bucket.ssh_keys_bucket.name}/vm_connection_info
+      
+      3. Install Google Authenticator app on your phone
+      4. SSH into the VM using the OS Login username from vm_connection_info
+      5. On first login, you'll set up 2FA
+      6. Future logins will require both SSH key and 2FA code
     EOT
   }
 }
