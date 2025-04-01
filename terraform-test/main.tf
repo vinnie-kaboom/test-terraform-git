@@ -350,6 +350,13 @@ resource "google_iap_tunnel_instance_iam_binding" "tunnel_iam" {
 }
 
 terraform {
+  required_providers {
+    google = {
+      source  = "hashicorp/google"
+      version = "~> 6.0"  # Update to use version 6.x
+    }
+  }
+
   backend "gcs" {
     bucket = "sylvan-apogee-450014-a6-terraform-state"
     prefix = "terraform/state"

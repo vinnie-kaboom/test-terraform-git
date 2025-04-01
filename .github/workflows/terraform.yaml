@@ -20,7 +20,7 @@ jobs:
 
     steps:
     - name: Checkout
-      uses: actions/checkout@v3
+      uses: actions/checkout@v4
       with:
         ref: ${{ github.head_ref }}
         fetch-depth: 0
@@ -157,12 +157,14 @@ jobs:
         fi
 
     - name: 'Setup Terraform'
-      uses: hashicorp/setup-terraform@v2
+      uses: hashicorp/setup-terraform@v3
+      with:
+        terraform_version: "1.7.0"
 
     - name: 'Terraform Init'
       run: |
         cd terraform-test
-        terraform init
+        terraform init -upgrade
 
     - name: 'Terraform Format'
       run: |
@@ -256,6 +258,18 @@ jobs:
         rm -rf .terraform/
         rm -f .terraform.lock.hcl
         echo "Cleanup completed"
+
+    - name: Commit state file
+      if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+      run: |
+        cd terraform-test
+        if [[ -f terraform.tfstate ]]; then
+          git config --global user.name 'GitHub Actions Bot'
+          git config --global user.email 'actions@github.com'
+          git add terraform.tfstate*
+          git commit -m "Update Terraform state" || echo "No changes to commit"
+          git push || echo "No changes to push"
+        fi
 
           
           
