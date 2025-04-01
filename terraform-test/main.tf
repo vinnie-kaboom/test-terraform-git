@@ -57,6 +57,22 @@ resource "google_compute_firewall" "bastion-ssh" {
   }
 }
 
+# Add IAP firewall rule
+resource "google_compute_firewall" "iap_ssh" {
+  name    = "${var.project_id}-allow-iap-ssh"
+  network = google_compute_network.vpc_network.name
+  project = var.project_id
+
+  allow {
+    protocol = "tcp"
+    ports    = ["22"]
+  }
+
+  # Only allow connections from IAP's IP range
+  source_ranges = ["35.235.240.0/20"]
+  target_tags   = ["bastion-host"]
+}
+
 # Create VM instance
 resource "google_compute_instance" "vm_instance" {
   name         = "${var.project_id}-bastion"
@@ -267,26 +283,26 @@ output "ssh_keys_bucket" {
   }
 }
 
+# Update the output to include IAP connection command
 output "connection_details" {
   value = {
     instance_name      = google_compute_instance.vm_instance.name
-    public_ip         = google_compute_instance.vm_instance.network_interface[0].access_config[0].nat_ip
     zone              = google_compute_instance.vm_instance.zone
-    ssh_key_path      = "/home/runner/.ssh/google_compute_engine"
-    bucket_path       = "gs://${google_storage_bucket.ssh_keys_bucket.name}"
+    iap_command       = "gcloud compute ssh ${google_compute_instance.vm_instance.name} --project=${var.project_id} --zone=${google_compute_instance.vm_instance.zone} --tunnel-through-iap"
     setup_instructions = <<-EOT
-      1. Download SSH keys from bucket:
-         gsutil cp gs://${google_storage_bucket.ssh_keys_bucket.name}/google_compute_engine* ~/.ssh/
-         chmod 600 ~/.ssh/google_compute_engine
-         chmod 644 ~/.ssh/google_compute_engine.pub
-      
-      2. Get connection details:
-         gsutil cat gs://${google_storage_bucket.ssh_keys_bucket.name}/vm_connection_info
-      
-      3. Install Google Authenticator app on your phone
-      4. SSH into the VM using the OS Login username from vm_connection_info
-      5. On first login, you'll set up 2FA
-      6. Future logins will require both SSH key and 2FA code
+      To connect to your VM:
+
+      1. Run this command:
+         ${<<-CMD
+           gcloud compute ssh ${google_compute_instance.vm_instance.name} \
+             --project=${var.project_id} \
+             --zone=${google_compute_instance.vm_instance.zone} \
+             --tunnel-through-iap
+         CMD
+         }
+
+      2. On first login, you'll set up 2FA with Google Authenticator
+      3. Future logins will require your 2FA code
     EOT
   }
 }
@@ -296,6 +312,41 @@ output "vpc_network_details" {
     name = google_compute_network.vpc_network.name
     id   = google_compute_network.vpc_network.id
   }
+}
+
+# Make sure IAP API is enabled
+resource "google_project_service" "iap_api" {
+  project = var.project_id
+  service = "iap.googleapis.com"
+
+  disable_dependent_services = false
+  disable_on_destroy        = false
+}
+
+# Add IAP OAuth consent screen (if not already configured)
+resource "google_iap_brand" "project_brand" {
+  support_email     = var.support_email
+  application_title = "SSH Access via IAP"
+  project          = var.project_id
+
+  depends_on = [
+    google_project_service.iap_api
+  ]
+}
+
+# Add IAP OAuth client (if not already configured)
+resource "google_iap_client" "project_client" {
+  display_name = "SSH Access Client"
+  brand        = google_iap_brand.project_brand.name
+}
+
+# Add IAP tunnel users
+resource "google_iap_tunnel_instance_iam_binding" "tunnel_iam" {
+  project  = var.project_id
+  zone     = var.zone
+  instance = google_compute_instance.vm_instance.name
+  role     = "roles/iap.tunnelResourceAccessor"
+  members  = var.iap_authorized_users
 }
 
 terraform {
