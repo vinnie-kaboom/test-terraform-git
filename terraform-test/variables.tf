@@ -76,7 +76,7 @@ variable "github_repo" {
 }
 
 variable "support_email" {
-  description = "Email address for IAP OAuth consent screen"
+  description = "Support email for IAP OAuth consent screen"
   type        = string
 }
 
@@ -95,11 +95,6 @@ variable "disk_encryption_key" {
   description = "KMS key for disk encryption"
   type        = string
   default     = null  # If you want to use default Google encryption
-}
-
-variable "user_email" {
-  description = "Your Google Cloud user email"
-  type        = string
 }
 
 variable "ssh_key_path" {
