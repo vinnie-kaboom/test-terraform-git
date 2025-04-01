@@ -223,7 +223,10 @@ resource "null_resource" "ssh_key_setup" {
 
 resource "null_resource" "cleanup" {
   triggers = {
-    instance_id = google_compute_instance.vm_instance.id
+    instance_id  = google_compute_instance.vm_instance.id
+    bucket_name  = "${var.project_id}-ssh-keys"  # Store bucket name in triggers
+    ssh_dir     = "/home/runner/.ssh"
+    key_path    = "/home/runner/.ssh/google_compute_engine"
   }
 
   provisioner "local-exec" {
@@ -232,9 +235,9 @@ resource "null_resource" "cleanup" {
       #!/bin/bash
       set -e
       
-      SSH_DIR="/home/runner/.ssh"
-      KEY_PATH="$SSH_DIR/google_compute_engine"
-      BUCKET_NAME="${var.project_id}-ssh-keys"
+      SSH_DIR="${self.triggers.ssh_dir}"
+      KEY_PATH="${self.triggers.key_path}"
+      BUCKET_NAME="${self.triggers.bucket_name}"
       
       # Remove OS Login SSH keys
       if [ -f "$KEY_PATH.pub" ]; then
