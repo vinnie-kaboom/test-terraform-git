@@ -98,7 +98,7 @@ variable "disk_encryption_key" {
 }
 
 variable "user_email" {
-  description = "User email for OS Login"
+  description = "Your Google Cloud user email"
   type        = string
 }
 

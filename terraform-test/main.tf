@@ -283,26 +283,27 @@ output "ssh_keys_bucket" {
   }
 }
 
-# Update the output to include IAP connection command
+# Update the output to show simplified connection instructions
 output "connection_details" {
   value = {
     instance_name      = google_compute_instance.vm_instance.name
     zone              = google_compute_instance.vm_instance.zone
-    iap_command       = "gcloud compute ssh ${google_compute_instance.vm_instance.name} --project=${var.project_id} --zone=${google_compute_instance.vm_instance.zone} --tunnel-through-iap"
+    project_id        = var.project_id
+    connect_command   = "gcloud compute ssh ${google_compute_instance.vm_instance.name} --project=${var.project_id} --zone=${google_compute_instance.vm_instance.zone} --tunnel-through-iap"
     setup_instructions = <<-EOT
       To connect to your VM:
 
-      1. Run this command:
-         ${<<-CMD
-           gcloud compute ssh ${google_compute_instance.vm_instance.name} \
-             --project=${var.project_id} \
-             --zone=${google_compute_instance.vm_instance.zone} \
-             --tunnel-through-iap
-         CMD
-         }
+      1. Make sure you're logged into gcloud:
+         gcloud auth login
 
-      2. On first login, you'll set up 2FA with Google Authenticator
-      3. Future logins will require your 2FA code
+      2. Run this command:
+         gcloud compute ssh ${google_compute_instance.vm_instance.name} \
+           --project=${var.project_id} \
+           --zone=${google_compute_instance.vm_instance.zone} \
+           --tunnel-through-iap
+
+      3. On first login, you'll set up 2FA with Google Authenticator
+      4. Future logins will require your 2FA code
     EOT
   }
 }
@@ -323,30 +324,18 @@ resource "google_project_service" "iap_api" {
   disable_on_destroy        = false
 }
 
-# Add IAP OAuth consent screen (if not already configured)
-resource "google_iap_brand" "project_brand" {
-  support_email     = var.support_email
-  application_title = "SSH Access via IAP"
-  project          = var.project_id
-
-  depends_on = [
-    google_project_service.iap_api
-  ]
+# Instead, add IAP permissions to the service account
+resource "google_project_iam_member" "iap_tunnel_user" {
+  project = var.project_id
+  role    = "roles/iap.tunnelResourceAccessor"
+  member  = "serviceAccount:${google_service_account.vm_service_account.email}"
 }
 
-# Add IAP OAuth client (if not already configured)
-resource "google_iap_client" "project_client" {
-  display_name = "SSH Access Client"
-  brand        = google_iap_brand.project_brand.name
-}
-
-# Add IAP tunnel users
-resource "google_iap_tunnel_instance_iam_binding" "tunnel_iam" {
-  project  = var.project_id
-  zone     = var.zone
-  instance = google_compute_instance.vm_instance.name
-  role     = "roles/iap.tunnelResourceAccessor"
-  members  = var.iap_authorized_users
+# Add IAP Admin role to allow managing IAP settings
+resource "google_project_iam_member" "iap_admin" {
+  project = var.project_id
+  role    = "roles/iap.admin"
+  member  = "user:${var.user_email}"
 }
 
 terraform {
