@@ -76,12 +76,12 @@ variable "github_repo" {
 }
 
 variable "support_email" {
-  description = "Email address for IAP brand support"
+  description = "Email address for IAP OAuth consent screen"
   type        = string
 }
 
 variable "iap_authorized_users" {
-  description = "List of users authorized for IAP access (in format 'user:email@domain.com')"
+  description = "List of users authorized to use IAP tunnel (e.g., ['user:example@gmail.com'])"
   type        = list(string)
 }
 
