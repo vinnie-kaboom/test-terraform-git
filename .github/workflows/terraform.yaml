@@ -203,26 +203,17 @@ jobs:
         # Show repository value
         echo "Repository: ${{ github.repository }}"
 
-    - name: 'Terraform Plan'
+    - name: Terraform Plan
       run: |
         cd terraform-test
-        EMAIL="${{ secrets.AUTHORIZED_USER }}"
-        
-        terraform plan \
-          -var="support_email=${{ secrets.SUPPORT_EMAIL }}" \
-          -var="iap_authorized_users=[\"user:${EMAIL}\"]" \
-          -var="github_repo=${{ github.repository }}"
+        terraform plan -var="support_email=${{ secrets.SUPPORT_EMAIL }}"
 
-    - name: 'Terraform Apply'
-      if: github.event.pull_request.merged == true
+    - name: Terraform Apply
+      if: github.ref == 'refs/heads/main' && github.event_name == 'push'
       run: |
         cd terraform-test
-        EMAIL="${{ secrets.AUTHORIZED_USER }}"
-        
         terraform apply -auto-approve \
-          -var="support_email=${{ secrets.SUPPORT_EMAIL }}" \
-          -var="iap_authorized_users=[\"user:${EMAIL}\"]" \
-          -var="github_repo=${{ github.repository }}"
+                       -var="support_email=${{ secrets.SUPPORT_EMAIL }}"
 
     - name: 'Verify Secrets'
       run: |

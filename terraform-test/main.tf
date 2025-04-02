@@ -96,11 +96,9 @@ resource "google_compute_instance" "vm_instance" {
 
   # Use our created service account instead of the default one
   service_account {
-    email = google_service_account.vm_service_account.email
+    email  = google_service_account.vm_service_account.email
     scopes = [
-      "https://www.googleapis.com/auth/logging.write",
-      "https://www.googleapis.com/auth/monitoring.write",
-      "https://www.googleapis.com/auth/compute.readonly"
+      "https://www.googleapis.com/auth/cloud-platform"  # This gives access to all necessary APIs
     ]
   }
 
@@ -304,6 +302,8 @@ output "connection_details" {
 
       3. On first login, you'll set up 2FA with Google Authenticator
       4. Future logins will require your 2FA code
+
+      Note: If you get permission errors, run the commands shown in the post_setup_instructions output.
     EOT
   }
 }
@@ -324,18 +324,21 @@ resource "google_project_service" "iap_api" {
   disable_on_destroy        = false
 }
 
-# Instead, add IAP permissions to the service account
-resource "google_project_iam_member" "iap_tunnel_user" {
-  project = var.project_id
-  role    = "roles/iap.tunnelResourceAccessor"
-  member  = "serviceAccount:${google_service_account.vm_service_account.email}"
-}
+# Add output to show manual IAM setup instructions
+output "post_setup_instructions" {
+  value = <<-EOT
+    After deployment, please run these commands manually to set up IAM permissions:
 
-# Add IAP security configuration
-resource "google_project_iam_member" "iap_security_admin" {
-  project = var.project_id
-  role    = "roles/compute.securityAdmin"
-  member  = "serviceAccount:${google_service_account.vm_service_account.email}"
+    gcloud projects add-iam-policy-binding ${var.project_id} \
+      --member="serviceAccount:${google_service_account.vm_service_account.email}" \
+      --role="roles/iap.tunnelResourceAccessor"
+
+    gcloud compute instances add-iam-policy-binding ${google_compute_instance.vm_instance.name} \
+      --project=${var.project_id} \
+      --zone=${google_compute_instance.vm_instance.zone} \
+      --member="serviceAccount:${google_service_account.vm_service_account.email}" \
+      --role="roles/compute.osLogin"
+  EOT
 }
 
 terraform {
