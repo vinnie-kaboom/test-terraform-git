@@ -12,7 +12,8 @@ provider "google" {
 resource "google_project_service" "required_apis" {
   for_each = toset([
     "compute.googleapis.com",
-    "iam.googleapis.com"
+    "iam.googleapis.com",
+    "container.googleapis.com"
   ])
 
   project = var.project_id
@@ -350,70 +351,108 @@ output "post_setup_instructions" {
   EOT
 }
 
-# Create cluster nodes
-resource "google_compute_instance" "cluster_nodes" {
-  count        = var.node_count
-  name         = "${var.cluster_name}-node-${count.index + 1}"
-  machine_type = var.node_machine_type
-  zone         = var.cluster_zone
-  project      = var.project_id
+# Create GKE cluster
+resource "google_container_cluster" "primary" {
+  name                     = "${var.project_id}-gke"
+  location                 = var.region
+  project                  = var.project_id
+  remove_default_node_pool = true
+  initial_node_count       = 1
 
-  tags = var.node_tags
+  network    = google_compute_network.vpc_network.name
+  subnetwork = google_compute_subnetwork.subnet.name
 
-  boot_disk {
-    initialize_params {
-      image = "debian-cloud/debian-11"
-      size  = var.node_disk_size
+  private_cluster_config {
+    enable_private_nodes    = true
+    enable_private_endpoint = true  # Make the control plane private
+    master_ipv4_cidr_block = "172.16.0.0/28"
+  }
+
+  ip_allocation_policy {
+    cluster_secondary_range_name  = "pod-range"
+    services_secondary_range_name = "service-range"
+  }
+
+  # Only allow access from the bastion VM's IP
+  master_authorized_networks_config {
+    cidr_blocks {
+      cidr_block   = "${google_compute_instance.vm_instance.network_interface[0].network_ip}/32"
+      display_name = "bastion-vm"
     }
   }
 
-  network_interface {
-    network    = google_compute_network.vpc_network.name
-    subnetwork = google_compute_subnetwork.subnet.name
-    access_config {
-      // Ephemeral public IP
-    }
-  }
-
-  service_account {
-    email  = google_service_account.vm_service_account.email
-    scopes = ["cloud-platform"]
-  }
-
-  metadata = {
-    enable-oslogin = "TRUE"
+  release_channel {
+    channel = "REGULAR"
   }
 
   depends_on = [
+    google_project_service.required_apis,
     google_compute_subnetwork.subnet,
-    google_service_account.vm_service_account
+    google_compute_instance.vm_instance  # Ensure bastion is created first
   ]
 }
 
-# Add firewall rule for cluster nodes
-resource "google_compute_firewall" "cluster_nodes" {
-  name    = "${var.cluster_name}-allow-internal"
-  network = google_compute_network.vpc_network.name
+# Create node pool
+resource "google_container_node_pool" "primary_nodes" {
+  name       = "${var.project_id}-node-pool"
+  location   = var.region
+  project    = var.project_id
+  cluster    = google_container_cluster.primary.name
+  node_count = var.node_count
 
-  allow {
-    protocol = "tcp"
-    ports    = ["22", "80", "443"]
-  }
+  node_config {
+    oauth_scopes = [
+      "https://www.googleapis.com/auth/cloud-platform"
+    ]
 
-  source_ranges = ["10.0.0.0/16"]
-  target_tags   = var.node_tags
-}
+    labels = {
+      env = var.project_id
+    }
 
-# Output cluster node information
-output "cluster_nodes" {
-  value = {
-    for instance in google_compute_instance.cluster_nodes :
-    instance.name => {
-      private_ip = instance.network_interface[0].network_ip
-      public_ip  = instance.network_interface[0].access_config[0].nat_ip
+    machine_type = var.node_machine_type
+    disk_size_gb = var.node_disk_size
+    tags         = var.node_tags
+
+    metadata = {
+      disable-legacy-endpoints = "true"
     }
   }
-  description = "Information about the cluster nodes"
+
+  management {
+    auto_repair  = true
+    auto_upgrade = true
+  }
+
+  autoscaling {
+    min_node_count = 1
+    max_node_count = 3
+  }
+}
+
+# Update the output to include bastion-based connection instructions
+output "kubernetes_cluster" {
+  value = {
+    name     = google_container_cluster.primary.name
+    endpoint = google_container_cluster.primary.endpoint
+    location = google_container_cluster.primary.location
+    connect_command = <<-EOT
+      # Connect through bastion
+      1. SSH into the bastion:
+         gcloud compute ssh ${google_compute_instance.vm_instance.name} \
+           --project=${var.project_id} \
+           --zone=${google_compute_instance.vm_instance.zone} \
+           --tunnel-through-iap
+
+      2. From the bastion, get cluster credentials:
+         gcloud container clusters get-credentials ${google_container_cluster.primary.name} \
+           --region ${google_container_cluster.primary.location} \
+           --project ${var.project_id}
+
+      3. Verify access:
+         kubectl get nodes
+    EOT
+  }
+  description = "Information about the GKE cluster and connection instructions"
 }
 
 terraform {

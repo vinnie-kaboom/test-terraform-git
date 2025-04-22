@@ -115,27 +115,27 @@ variable "cluster_zone" {
 }
 
 variable "node_machine_type" {
-  description = "Machine type for cluster nodes"
+  description = "Machine type for GKE nodes"
   type        = string
   default     = "e2-medium"
 }
 
 variable "node_count" {
-  description = "Number of nodes in the cluster"
+  description = "Number of nodes in the GKE node pool"
   type        = number
   default     = 2
 }
 
 variable "node_disk_size" {
-  description = "Size of the boot disk for each node"
+  description = "Disk size for GKE nodes in GB"
   type        = number
-  default     = 20
+  default     = 30
 }
 
 variable "node_tags" {
-  description = "Tags to apply to cluster nodes"
+  description = "Tags to apply to GKE nodes"
   type        = list(string)
-  default     = ["cluster-node"]
+  default     = ["gke-node"]
 }
 
 variable "user_email" {
