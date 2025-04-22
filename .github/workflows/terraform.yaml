@@ -168,12 +168,21 @@ jobs:
       - name: 'Terraform Init'
         run: |
           cd terraform-test
-          terraform init
+          terraform init -reconfigure
 
-      - name: 'Force Unlock State'
+      - name: 'Check and Clean State'
         run: |
           cd terraform-test
-          terraform force-unlock -force 1745340528397292
+          # Check if state exists
+          if terraform state list > /dev/null 2>&1; then
+            echo "State exists, checking for locks..."
+            # List any existing locks
+            terraform state list
+            # If we can list the state, try to unlock any existing locks
+            terraform force-unlock -force $(terraform state list | grep -o '[0-9]*' || echo "0")
+          else
+            echo "No state found, proceeding with initialization..."
+          fi
 
       - name: 'Generate SSH Key'
         run: |
