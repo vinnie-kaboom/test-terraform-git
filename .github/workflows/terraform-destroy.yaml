@@ -24,14 +24,14 @@ jobs:
       - name: 'Terraform Init'
         run: |
           cd terraform-test
-          terraform init
+          terraform init -reconfigure
 
       - name: 'Terraform Plan Destroy'
         run: |
           cd terraform-test
           EMAIL="${{ secrets.AUTHORIZED_USER }}"
           
-          terraform plan -destroy \
+          terraform plan -destroy -lock=false \
             -var="support_email=${{ secrets.SUPPORT_EMAIL }}" \
             -var="iap_authorized_users=[\"user:${EMAIL}\"]" \
             -var="github_repo=${{ github.repository }}" \
@@ -42,7 +42,7 @@ jobs:
           cd terraform-test
           EMAIL="${{ secrets.AUTHORIZED_USER }}"
           
-          terraform destroy -auto-approve \
+          terraform destroy -auto-approve -lock=false \
             -var="support_email=${{ secrets.SUPPORT_EMAIL }}" \
             -var="iap_authorized_users=[\"user:${EMAIL}\"]" \
             -var="github_repo=${{ github.repository }}" \
