@@ -137,3 +137,8 @@ variable "node_tags" {
   type        = list(string)
   default     = ["cluster-node"]
 }
+
+variable "user_email" {
+  description = "Email of the user for SSH access"
+  type        = string
+}

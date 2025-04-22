@@ -38,6 +38,15 @@ resource "google_compute_network" "vpc_network" {
   auto_create_subnetworks = true
 }
 
+# Create subnet for cluster nodes
+resource "google_compute_subnetwork" "subnet" {
+  name          = "${var.project_id}-subnet"
+  project       = var.project_id
+  region        = var.region
+  network       = google_compute_network.vpc_network.name
+  ip_cidr_range = "10.0.0.0/24"
+}
+
 # Create firewall rule for SSH access
 resource "google_compute_firewall" "bastion-ssh" {
   name    = "${var.project_id}-allow-bastion-ssh"
@@ -347,6 +356,7 @@ resource "google_compute_instance" "cluster_nodes" {
   name         = "${var.cluster_name}-node-${count.index + 1}"
   machine_type = var.node_machine_type
   zone         = var.cluster_zone
+  project      = var.project_id
 
   tags = var.node_tags
 
@@ -358,6 +368,7 @@ resource "google_compute_instance" "cluster_nodes" {
   }
 
   network_interface {
+    network    = google_compute_network.vpc_network.name
     subnetwork = google_compute_subnetwork.subnet.name
     access_config {
       // Ephemeral public IP

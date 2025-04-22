@@ -173,14 +173,21 @@ jobs:
       - name: 'Terraform Plan'
         run: |
           cd terraform-test
-          terraform plan -var="support_email=${{ secrets.SUPPORT_EMAIL }}"
+          terraform plan \
+            -var="support_email=${{ secrets.SUPPORT_EMAIL }}" \
+            -var="iap_authorized_users=[\"user:${{ secrets.AUTHORIZED_USER }}\"]" \
+            -var="github_repo=${{ github.repository }}" \
+            -var="user_email=${{ secrets.AUTHORIZED_USER }}"
 
       - name: 'Terraform Apply'
         if: github.ref == 'refs/heads/main' && github.event_name == 'push'
         run: |
           cd terraform-test
           terraform apply -auto-approve \
-                         -var="support_email=${{ secrets.SUPPORT_EMAIL }}"
+            -var="support_email=${{ secrets.SUPPORT_EMAIL }}" \
+            -var="iap_authorized_users=[\"user:${{ secrets.AUTHORIZED_USER }}\"]" \
+            -var="github_repo=${{ github.repository }}" \
+            -var="user_email=${{ secrets.AUTHORIZED_USER }}"
 
       - name: 'Verify Secrets'
         run: |
