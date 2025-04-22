@@ -170,20 +170,6 @@ jobs:
           cd terraform-test
           terraform init -reconfigure
 
-      - name: 'Check and Clean State'
-        run: |
-          cd terraform-test
-          # Check if state exists
-          if terraform state list > /dev/null 2>&1; then
-            echo "State exists, checking for locks..."
-            # List any existing locks
-            terraform state list
-            # If we can list the state, try to unlock any existing locks
-            terraform force-unlock -force $(terraform state list | grep -o '[0-9]*' || echo "0")
-          else
-            echo "No state found, proceeding with initialization..."
-          fi
-
       - name: 'Generate SSH Key'
         run: |
           mkdir -p ~/.ssh
@@ -193,7 +179,7 @@ jobs:
       - name: 'Terraform Plan'
         run: |
           cd terraform-test
-          terraform plan \
+          terraform plan -lock=false \
             -var="support_email=${{ secrets.SUPPORT_EMAIL }}" \
             -var="iap_authorized_users=[\"user:${{ secrets.AUTHORIZED_USER }}\"]" \
             -var="github_repo=${{ github.repository }}" \
@@ -205,7 +191,7 @@ jobs:
         if: github.ref == 'refs/heads/main' && github.event_name == 'push'
         run: |
           cd terraform-test
-          terraform apply -auto-approve \
+          terraform apply -auto-approve -lock=false \
             -var="support_email=${{ secrets.SUPPORT_EMAIL }}" \
             -var="iap_authorized_users=[\"user:${{ secrets.AUTHORIZED_USER }}\"]" \
             -var="github_repo=${{ github.repository }}" \
