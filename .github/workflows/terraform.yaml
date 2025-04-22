@@ -1,4 +1,4 @@
-name: 'Terraform'
+         name: 'Terraform'
 
 on:
   push:
@@ -165,26 +165,16 @@ jobs:
       uses: hashicorp/setup-terraform@v3
       with:
         terraform_version: "1.7.0"
+echo "/dev/sda1 /mnt/external exfat defaults 0 0" | sudo tee -a /etc/fstab
+Reverse DNS assigns hostnames to IP addresses. How is the name of the IP address 198.51.100.165 stored on a DNS server?
 
-    - name: 'Terraform Init'
-      run: |
-        cd terraform-test
-        terraform init -upgrade
+A. In the A record for 165.100.51.198.ipv4.arpa.
+B. In the PTR record for 165.100.51.198.in-addr.arpa.
+C. In the RNAME record for 198-51-100-165.rev.arpa.
+D. In the ARPA record for 165.100.51.198.rev.
+E. In the REV record for arpa.in-addr.198.51.100.165.
 
-    - name: 'Terraform Format'
-      run: |
-        cd terraform-test
-        terraform fmt
-        terraform fmt -check
-
-    - name: 'Debug Variables'
-      run: |
-        cd terraform-test
-        # Check if email has content (safely)
-        if [ -n "${{ secrets.AUTHORIZED_USER }}" ]; then
-          echo "AUTHORIZED_USER is set ✓"
-          EMAIL="${{ secrets.AUTHORIZED_USER }}"
-          echo "Email length: ${#EMAIL}"
+IL}"
         else
           echo "AUTHORIZED_USER is empty ✗"
         fi
@@ -265,6 +255,6 @@ jobs:
           git commit -m "Update Terraform state" || echo "No changes to commit"
           git push || echo "No changes to push"
         fi
+# test
 
-          
-          
+
