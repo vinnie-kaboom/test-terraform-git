@@ -19,7 +19,7 @@ variable "zone" {
 variable "allowed_ssh_ranges" {
   description = "List of IP ranges allowed to SSH to bastion"
   type        = list(string)
-  default     = ["35.235.240.0/20"]  # IAP IP range
+  default     = ["35.235.240.0/20"] # IAP IP range
 }
 
 variable "service_account_email" {
@@ -94,10 +94,46 @@ variable "allowed_internal_ranges" {
 variable "disk_encryption_key" {
   description = "KMS key for disk encryption"
   type        = string
-  default     = null  # If you want to use default Google encryption
+  default     = null # If you want to use default Google encryption
 }
 
 variable "ssh_key_path" {
   description = "Path to save the generated SSH key"
   default     = "~/.ssh/google_compute_engine"
+}
+
+variable "cluster_name" {
+  description = "Name of the cluster"
+  type        = string
+  default     = "test-cluster"
+}
+
+variable "cluster_zone" {
+  description = "Zone for the cluster nodes"
+  type        = string
+  default     = "us-central1-a"
+}
+
+variable "node_machine_type" {
+  description = "Machine type for cluster nodes"
+  type        = string
+  default     = "e2-medium"
+}
+
+variable "node_count" {
+  description = "Number of nodes in the cluster"
+  type        = number
+  default     = 2
+}
+
+variable "node_disk_size" {
+  description = "Size of the boot disk for each node"
+  type        = number
+  default     = 20
+}
+
+variable "node_tags" {
+  description = "Tags to apply to cluster nodes"
+  type        = list(string)
+  default     = ["cluster-node"]
 }

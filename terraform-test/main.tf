@@ -14,12 +14,12 @@ resource "google_project_service" "required_apis" {
     "compute.googleapis.com",
     "iam.googleapis.com"
   ])
-  
+
   project = var.project_id
   service = each.value
-  
+
   disable_dependent_services = false
-  disable_on_destroy        = false
+  disable_on_destroy         = false
 }
 
 # Create a service account for the VM
@@ -96,20 +96,20 @@ resource "google_compute_instance" "vm_instance" {
 
   # Use our created service account instead of the default one
   service_account {
-    email  = google_service_account.vm_service_account.email
+    email = google_service_account.vm_service_account.email
     scopes = [
-      "https://www.googleapis.com/auth/cloud-platform"  # This gives access to all necessary APIs
+      "https://www.googleapis.com/auth/cloud-platform" # This gives access to all necessary APIs
     ]
   }
 
   metadata = {
-    enable-oslogin         = "TRUE"
-    enable-oslogin-2fa     = "TRUE"
+    enable-oslogin           = "TRUE"
+    enable-oslogin-2fa       = "TRUE"
     security-key-enforce-2fa = "TRUE"
-    block-project-ssh-keys = "TRUE"
-    serial-port-enable     = "FALSE"
-    enable-guest-attributes = "FALSE"
-    
+    block-project-ssh-keys   = "TRUE"
+    serial-port-enable       = "FALSE"
+    enable-guest-attributes  = "FALSE"
+
     startup-script = <<-EOT
       #!/bin/bash
       apt-get update && apt-get upgrade -y
@@ -146,8 +146,8 @@ resource "google_compute_instance" "vm_instance" {
 
   shielded_instance_config {
     enable_integrity_monitoring = true
-    enable_secure_boot         = true
-    enable_vtpm               = true
+    enable_secure_boot          = true
+    enable_vtpm                 = true
   }
 
   depends_on = [
@@ -166,12 +166,12 @@ resource "google_compute_instance" "vm_instance" {
 resource "google_storage_bucket" "ssh_keys_bucket" {
   name          = "${var.project_id}-ssh-keys"
   location      = var.region
-  force_destroy = true  # Allows deletion of bucket with contents
+  force_destroy = true # Allows deletion of bucket with contents
 
   uniform_bucket_level_access = true
-  
+
   versioning {
-    enabled = true  # Enables versioning for recovery
+    enabled = true # Enables versioning for recovery
   }
 }
 
@@ -237,14 +237,14 @@ resource "null_resource" "ssh_key_setup" {
 
 resource "null_resource" "cleanup" {
   triggers = {
-    instance_id  = google_compute_instance.vm_instance.id
-    bucket_name  = "${var.project_id}-ssh-keys"  # Store bucket name in triggers
+    instance_id = google_compute_instance.vm_instance.id
+    bucket_name = "${var.project_id}-ssh-keys" # Store bucket name in triggers
     ssh_dir     = "/home/runner/.ssh"
     key_path    = "/home/runner/.ssh/google_compute_engine"
   }
 
   provisioner "local-exec" {
-    when = destroy
+    when    = destroy
     command = <<-EOT
       #!/bin/bash
       set -e
@@ -285,9 +285,9 @@ output "ssh_keys_bucket" {
 output "connection_details" {
   value = {
     instance_name      = google_compute_instance.vm_instance.name
-    zone              = google_compute_instance.vm_instance.zone
-    project_id        = var.project_id
-    connect_command   = "gcloud compute ssh ${google_compute_instance.vm_instance.name} --project=${var.project_id} --zone=${google_compute_instance.vm_instance.zone} --tunnel-through-iap"
+    zone               = google_compute_instance.vm_instance.zone
+    project_id         = var.project_id
+    connect_command    = "gcloud compute ssh ${google_compute_instance.vm_instance.name} --project=${var.project_id} --zone=${google_compute_instance.vm_instance.zone} --tunnel-through-iap"
     setup_instructions = <<-EOT
       To connect to your VM:
 
@@ -321,7 +321,7 @@ resource "google_project_service" "iap_api" {
   service = "iap.googleapis.com"
 
   disable_dependent_services = false
-  disable_on_destroy        = false
+  disable_on_destroy         = false
 }
 
 # Add output to show manual IAM setup instructions
@@ -341,11 +341,75 @@ output "post_setup_instructions" {
   EOT
 }
 
+# Create cluster nodes
+resource "google_compute_instance" "cluster_nodes" {
+  count        = var.node_count
+  name         = "${var.cluster_name}-node-${count.index + 1}"
+  machine_type = var.node_machine_type
+  zone         = var.cluster_zone
+
+  tags = var.node_tags
+
+  boot_disk {
+    initialize_params {
+      image = "debian-cloud/debian-11"
+      size  = var.node_disk_size
+    }
+  }
+
+  network_interface {
+    subnetwork = google_compute_subnetwork.subnet.name
+    access_config {
+      // Ephemeral public IP
+    }
+  }
+
+  service_account {
+    email  = google_service_account.vm_service_account.email
+    scopes = ["cloud-platform"]
+  }
+
+  metadata = {
+    ssh-keys = "${var.ssh_user}:${file(var.ssh_pub_key_path)}"
+  }
+
+  depends_on = [
+    google_compute_subnetwork.subnet,
+    google_service_account.vm_service_account
+  ]
+}
+
+# Add firewall rule for cluster nodes
+resource "google_compute_firewall" "cluster_nodes" {
+  name    = "${var.cluster_name}-allow-internal"
+  network = google_compute_network.vpc_network.name
+
+  allow {
+    protocol = "tcp"
+    ports    = ["22", "80", "443"]
+  }
+
+  source_ranges = ["10.0.0.0/16"]
+  target_tags   = var.node_tags
+}
+
+# Output cluster node information
+output "cluster_nodes" {
+  value = {
+    for instance in google_compute_instance.cluster_nodes :
+    instance.name => {
+      private_ip = instance.network_interface[0].network_ip
+      public_ip  = instance.network_interface[0].access_config[0].nat_ip
+    }
+  }
+  description = "Information about the cluster nodes"
+}
+
 terraform {
   required_providers {
     google = {
       source  = "hashicorp/google"
-      version = "~> 6.0"  # Update to use version 6.x
+      version = "~> 6.0" # Update to use version 6.x
     }
   }
 
