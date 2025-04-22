@@ -177,7 +177,9 @@ jobs:
             -var="support_email=${{ secrets.SUPPORT_EMAIL }}" \
             -var="iap_authorized_users=[\"user:${{ secrets.AUTHORIZED_USER }}\"]" \
             -var="github_repo=${{ github.repository }}" \
-            -var="user_email=${{ secrets.AUTHORIZED_USER }}"
+            -var="user_email=${{ secrets.AUTHORIZED_USER }}" \
+            -var="ssh_user=ubuntu" \
+            -var="ssh_pub_key_path=/home/runner/.ssh/id_rsa.pub"
 
       - name: 'Terraform Apply'
         if: github.ref == 'refs/heads/main' && github.event_name == 'push'
@@ -187,7 +189,9 @@ jobs:
             -var="support_email=${{ secrets.SUPPORT_EMAIL }}" \
             -var="iap_authorized_users=[\"user:${{ secrets.AUTHORIZED_USER }}\"]" \
             -var="github_repo=${{ github.repository }}" \
-            -var="user_email=${{ secrets.AUTHORIZED_USER }}"
+            -var="user_email=${{ secrets.AUTHORIZED_USER }}" \
+            -var="ssh_user=ubuntu" \
+            -var="ssh_pub_key_path=/home/runner/.ssh/id_rsa.pub"
 
       - name: 'Verify Secrets'
         run: |

@@ -142,3 +142,15 @@ variable "user_email" {
   description = "Email of the user for SSH access"
   type        = string
 }
+
+variable "ssh_user" {
+  description = "Username for SSH access to cluster nodes"
+  type        = string
+  default     = "ubuntu"
+}
+
+variable "ssh_pub_key_path" {
+  description = "Path to the public SSH key file"
+  type        = string
+  default     = "~/.ssh/id_rsa.pub"
+}
