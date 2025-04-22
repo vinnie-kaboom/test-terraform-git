@@ -455,6 +455,72 @@ output "kubernetes_cluster" {
   description = "Information about the GKE cluster and connection instructions"
 }
 
+# Add comprehensive output with setup and access instructions
+output "setup_and_access_instructions" {
+  value = <<-EOT
+    ===== SETUP AND ACCESS INSTRUCTIONS =====
+
+    1. Initial Setup:
+       Run these commands to set up IAM permissions:
+       
+       gcloud projects add-iam-policy-binding ${var.project_id} \
+         --member="serviceAccount:${google_service_account.vm_service_account.email}" \
+         --role="roles/iap.tunnelResourceAccessor"
+
+       gcloud compute instances add-iam-policy-binding ${google_compute_instance.vm_instance.name} \
+         --project=${var.project_id} \
+         --zone=${google_compute_instance.vm_instance.zone} \
+         --member="serviceAccount:${google_service_account.vm_service_account.email}" \
+         --role="roles/compute.osLogin"
+
+    2. Access the Bastion VM:
+       a. Make sure you're logged into gcloud:
+          gcloud auth login
+
+       b. Connect to the bastion using IAP:
+          gcloud compute ssh ${google_compute_instance.vm_instance.name} \
+            --project=${var.project_id} \
+            --zone=${google_compute_instance.vm_instance.zone} \
+            --tunnel-through-iap
+
+       c. On first login, you'll set up 2FA with Google Authenticator
+       d. Future logins will require your 2FA code
+
+    3. Access the Kubernetes Cluster:
+       a. From the bastion VM, get cluster credentials:
+          gcloud container clusters get-credentials ${google_container_cluster.primary.name} \
+            --region ${google_container_cluster.primary.location} \
+            --project ${var.project_id}
+
+       b. Verify cluster access:
+          kubectl get nodes
+
+       c. (Optional) Set up kubectl context for local use:
+          # On your local machine, create a kubectl context that tunnels through the bastion
+          gcloud container clusters get-credentials ${google_container_cluster.primary.name} \
+            --region ${google_container_cluster.primary.location} \
+            --project ${var.project_id} \
+            --internal-ip
+
+    4. Cluster Information:
+       - Cluster Name: ${google_container_cluster.primary.name}
+       - Region: ${google_container_cluster.primary.location}
+       - Project: ${var.project_id}
+       - Node Count: ${var.node_count}
+       - Machine Type: ${var.node_machine_type}
+
+    5. Security Notes:
+       - The cluster is private and only accessible through the bastion
+       - All nodes are in a private subnet
+       - The control plane is private
+       - 2FA is required for bastion access
+       - OS Login is enabled for secure access
+
+    ========================================
+  EOT
+  description = "Comprehensive setup and access instructions for the infrastructure"
+}
+
 terraform {
   required_providers {
     google = {
