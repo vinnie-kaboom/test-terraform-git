@@ -381,7 +381,7 @@ resource "google_compute_instance" "cluster_nodes" {
   }
 
   metadata = {
-    ssh-keys = "${var.ssh_user}:${file(var.ssh_pub_key_path)}"
+    enable-oslogin = "TRUE"
   }
 
   depends_on = [
