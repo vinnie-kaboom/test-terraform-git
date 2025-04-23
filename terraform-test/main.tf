@@ -36,7 +36,13 @@ resource "google_service_account" "vm_service_account" {
 resource "google_compute_network" "vpc_network" {
   name                    = "${var.project_id}-vpc"
   project                 = var.project_id
-  auto_create_subnetworks = true
+  auto_create_subnetworks = false  # Changed to false to prevent automatic subnet creation
+
+  lifecycle {
+    ignore_changes = [
+      name
+    ]
+  }
 }
 
 # Create subnet for cluster nodes
@@ -49,12 +55,18 @@ resource "google_compute_subnetwork" "subnet" {
 
   secondary_ip_range {
     range_name    = "pod-range"
-    ip_cidr_range = "10.0.1.0/22"
+    ip_cidr_range = "10.0.1.0/22"  # Increased from /24 to /22 (1024 IPs)
   }
 
   secondary_ip_range {
     range_name    = "service-range"
-    ip_cidr_range = "10.0.5.0/24"
+    ip_cidr_range = "10.0.5.0/24"  # Moved to a different range to avoid overlap
+  }
+
+  lifecycle {
+    ignore_changes = [
+      name
+    ]
   }
 }
 
