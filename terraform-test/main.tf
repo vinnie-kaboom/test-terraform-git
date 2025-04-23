@@ -49,12 +49,12 @@ resource "google_compute_subnetwork" "subnet" {
 
   secondary_ip_range {
     range_name    = "pod-range"
-    ip_cidr_range = "10.0.1.0/24"
+    ip_cidr_range = "10.0.1.0/22"
   }
 
   secondary_ip_range {
     range_name    = "service-range"
-    ip_cidr_range = "10.0.2.0/24"
+    ip_cidr_range = "10.0.5.0/24"
   }
 }
 
@@ -182,16 +182,20 @@ resource "google_compute_instance" "vm_instance" {
   }
 }
 
-# Add this resource to create a bucket for SSH keys
+# Create GCS bucket for SSH keys
 resource "google_storage_bucket" "ssh_keys_bucket" {
   name          = "${var.project_id}-ssh-keys"
   location      = var.region
-  force_destroy = true # Allows deletion of bucket with contents
+  force_destroy = true
+  project       = var.project_id
 
   uniform_bucket_level_access = true
 
-  versioning {
-    enabled = true # Enables versioning for recovery
+  lifecycle {
+    ignore_changes = [
+      name,
+      location
+    ]
   }
 }
 
@@ -409,10 +413,16 @@ resource "google_container_cluster" "primary" {
     ]
   }
 
+  timeouts {
+    create = "60m"
+    update = "60m"
+    delete = "60m"
+  }
+
   depends_on = [
     google_project_service.required_apis,
     google_compute_subnetwork.subnet,
-    google_compute_instance.vm_instance  # Ensure bastion is created first
+    google_service_account.vm_service_account
   ]
 }
 
@@ -444,6 +454,16 @@ resource "google_container_node_pool" "primary_nodes" {
     min_node_count = var.node_count
     max_node_count = var.node_count + 2
   }
+
+  timeouts {
+    create = "30m"
+    update = "30m"
+    delete = "30m"
+  }
+
+  depends_on = [
+    google_container_cluster.primary
+  ]
 }
 
 # Update the output to include bastion-based connection instructions
