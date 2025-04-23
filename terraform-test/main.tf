@@ -518,6 +518,13 @@ output "setup_and_access_instructions" {
   description = "Comprehensive setup and access instructions for the infrastructure"
 }
 
+# Add Kubernetes provider
+provider "kubernetes" {
+  host                   = "https://${google_container_cluster.primary.endpoint}"
+  token                  = data.google_client_config.default.access_token
+  cluster_ca_certificate = base64decode(google_container_cluster.primary.master_auth[0].cluster_ca_certificate)
+}
+
 # Add Helm provider
 provider "helm" {
   kubernetes {
@@ -538,7 +545,8 @@ resource "kubernetes_namespace" "argocd" {
 
   depends_on = [
     google_container_cluster.primary,
-    google_container_node_pool.primary_nodes
+    google_container_node_pool.primary_nodes,
+    google_project_service.required_apis
   ]
 }
 
@@ -589,7 +597,8 @@ resource "helm_release" "argocd" {
   depends_on = [
     kubernetes_namespace.argocd,
     google_container_cluster.primary,
-    google_container_node_pool.primary_nodes
+    google_container_node_pool.primary_nodes,
+    google_project_service.required_apis
   ]
 }
 
