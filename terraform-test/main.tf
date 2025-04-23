@@ -55,12 +55,12 @@ resource "google_compute_subnetwork" "subnet" {
 
   secondary_ip_range {
     range_name    = "pod-range"
-    ip_cidr_range = "10.0.1.0/22"  # Increased from /24 to /22 (1024 IPs)
+    ip_cidr_range = "10.0.1.0/24"  # Changed back to /24 for valid CIDR
   }
 
   secondary_ip_range {
     range_name    = "service-range"
-    ip_cidr_range = "10.0.5.0/24"  # Moved to a different range to avoid overlap
+    ip_cidr_range = "10.0.2.0/24"  # Changed back to /24 for valid CIDR
   }
 
   lifecycle {
@@ -108,90 +108,41 @@ resource "google_compute_firewall" "iap_ssh" {
 # Create VM instance
 resource "google_compute_instance" "vm_instance" {
   name         = "${var.project_id}-bastion"
-  machine_type = var.machine_type
-  zone         = var.zone
+  machine_type = "e2-medium"
+  zone         = "${var.region}-a"
   project      = var.project_id
-
-  tags = ["bastion-host"]
 
   boot_disk {
     initialize_params {
-      image = "debian-cloud/debian-11"
-      size  = 10
+      image = "ubuntu-os-cloud/ubuntu-2204-lts"
+      size  = 30
     }
   }
 
   network_interface {
-    network = google_compute_network.vpc_network.name
-    access_config {}
-  }
-
-  # Use our created service account instead of the default one
-  service_account {
-    email = google_service_account.vm_service_account.email
-    scopes = [
-      "https://www.googleapis.com/auth/cloud-platform" # This gives access to all necessary APIs
-    ]
+    network    = google_compute_network.vpc_network.name
+    subnetwork = google_compute_subnetwork.subnet.name  # Added subnet specification
+    access_config {
+      // Ephemeral public IP
+    }
   }
 
   metadata = {
-    enable-oslogin           = "TRUE"
-    enable-oslogin-2fa       = "TRUE"
-    security-key-enforce-2fa = "TRUE"
-    block-project-ssh-keys   = "TRUE"
-    serial-port-enable       = "FALSE"
-    enable-guest-attributes  = "FALSE"
-
-    startup-script = <<-EOT
-      #!/bin/bash
-      apt-get update && apt-get upgrade -y
-      apt-get install -y \
-        fail2ban \
-        unattended-upgrades \
-        apt-listchanges \
-        libpam-google-authenticator
-      
-      # Configure automatic updates
-      echo 'Unattended-Upgrade::Automatic-Reboot "true";' >> /etc/apt/apt.conf.d/50unattended-upgrades
-      echo 'Unattended-Upgrade::Automatic-Reboot-Time "02:00";' >> /etc/apt/apt.conf.d/50unattended-upgrades
-      
-      # Configure SSH
-      sed -i 's/#PermitRootLogin yes/PermitRootLogin no/' /etc/ssh/sshd_config
-      sed -i 's/PasswordAuthentication yes/PasswordAuthentication no/' /etc/ssh/sshd_config
-      sed -i 's/#MaxAuthTries 6/MaxAuthTries 3/' /etc/ssh/sshd_config
-      sed -i 's/ChallengeResponseAuthentication no/ChallengeResponseAuthentication yes/' /etc/ssh/sshd_config
-      echo "AuthenticationMethods publickey,keyboard-interactive" >> /etc/ssh/sshd_config
-      
-      # Configure PAM for 2FA
-      echo "auth required pam_google_authenticator.so" >> /etc/pam.d/sshd
-      
-      # Configure firewall
-      iptables -A INPUT -p tcp --dport 22 -j ACCEPT
-      iptables -A INPUT -m state --state ESTABLISHED,RELATED -j ACCEPT
-      iptables -P INPUT DROP
-      
-      DEBIAN_FRONTEND=noninteractive apt-get install -y iptables-persistent
-      
-      systemctl restart sshd
-    EOT
+    enable-oslogin = "TRUE"
   }
 
-  shielded_instance_config {
-    enable_integrity_monitoring = true
-    enable_secure_boot          = true
-    enable_vtpm                 = true
+  service_account {
+    email  = google_service_account.vm_service_account.email
+    scopes = ["cloud-platform"]
   }
+
+  tags = ["bastion", "ssh"]
 
   depends_on = [
-    google_project_service.required_apis,
+    google_compute_network.vpc_network,
+    google_compute_subnetwork.subnet,
     google_service_account.vm_service_account
   ]
-
-  timeouts {
-    create = "30m"
-    delete = "30m"
-    update = "30m"
-  }
 }
 
 # Create GCS bucket for SSH keys
