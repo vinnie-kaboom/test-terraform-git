@@ -46,6 +46,16 @@ resource "google_compute_subnetwork" "subnet" {
   region        = var.region
   network       = google_compute_network.vpc_network.name
   ip_cidr_range = "10.0.0.0/24"
+
+  secondary_ip_range {
+    range_name    = "pod-range"
+    ip_cidr_range = "10.0.1.0/24"
+  }
+
+  secondary_ip_range {
+    range_name    = "service-range"
+    ip_cidr_range = "10.0.2.0/24"
+  }
 }
 
 # Create firewall rule for SSH access
@@ -353,9 +363,13 @@ output "post_setup_instructions" {
 
 # Create GKE cluster
 resource "google_container_cluster" "primary" {
-  name                     = "${var.project_id}-gke"
-  location                 = var.region
-  project                  = var.project_id
+  name     = "${var.project_id}-gke"
+  location = var.region
+  project  = var.project_id
+
+  # We can't create a cluster with no node pool defined, but we want to only use
+  # separately managed node pools. So we create the smallest possible default
+  # node pool and immediately delete it.
   remove_default_node_pool = true
   initial_node_count       = 1
 
@@ -364,8 +378,8 @@ resource "google_container_cluster" "primary" {
 
   private_cluster_config {
     enable_private_nodes    = true
-    enable_private_endpoint = true  # Make the control plane private
-    master_ipv4_cidr_block = "172.16.0.0/28"
+    enable_private_endpoint = true
+    master_ipv4_cidr_block  = "172.16.0.0/28"
   }
 
   ip_allocation_policy {
@@ -373,7 +387,6 @@ resource "google_container_cluster" "primary" {
     services_secondary_range_name = "service-range"
   }
 
-  # Only allow access from the bastion VM's IP
   master_authorized_networks_config {
     cidr_blocks {
       cidr_block   = "${google_compute_instance.vm_instance.network_interface[0].network_ip}/32"
@@ -385,6 +398,17 @@ resource "google_container_cluster" "primary" {
     channel = "REGULAR"
   }
 
+  workload_identity_config {
+    workload_pool = "${var.project_id}.svc.id.goog"
+  }
+
+  node_config {
+    service_account = google_service_account.vm_service_account.email
+    oauth_scopes = [
+      "https://www.googleapis.com/auth/cloud-platform"
+    ]
+  }
+
   depends_on = [
     google_project_service.required_apis,
     google_compute_subnetwork.subnet,
@@ -394,28 +418,21 @@ resource "google_container_cluster" "primary" {
 
 # Create node pool
 resource "google_container_node_pool" "primary_nodes" {
-  name       = "${var.project_id}-node-pool"
+  name       = "${google_container_cluster.primary.name}-node-pool"
   location   = var.region
-  project    = var.project_id
   cluster    = google_container_cluster.primary.name
+  project    = var.project_id
   node_count = var.node_count
 
   node_config {
-    oauth_scopes = [
-      "https://www.googleapis.com/auth/cloud-platform"
-    ]
-
-    labels = {
-      env = var.project_id
-    }
-
     machine_type = var.node_machine_type
     disk_size_gb = var.node_disk_size
     tags         = var.node_tags
 
-    metadata = {
-      disable-legacy-endpoints = "true"
-    }
+    service_account = google_service_account.vm_service_account.email
+    oauth_scopes = [
+      "https://www.googleapis.com/auth/cloud-platform"
+    ]
   }
 
   management {
@@ -424,8 +441,8 @@ resource "google_container_node_pool" "primary_nodes" {
   }
 
   autoscaling {
-    min_node_count = 1
-    max_node_count = 3
+    min_node_count = var.node_count
+    max_node_count = var.node_count + 2
   }
 }
 
