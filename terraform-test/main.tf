@@ -51,16 +51,16 @@ resource "google_compute_subnetwork" "subnet" {
   project       = var.project_id
   region        = var.region
   network       = google_compute_network.vpc_network.name
-  ip_cidr_range = "10.0.0.0/24"
+  ip_cidr_range = "10.0.0.0/22"  # Increased from /24 to /22 for more IPs
 
   secondary_ip_range {
     range_name    = "pod-range"
-    ip_cidr_range = "10.0.1.0/24"  # Changed back to /24 for valid CIDR
+    ip_cidr_range = "10.0.4.0/22"  # Changed to a larger range
   }
 
   secondary_ip_range {
     range_name    = "service-range"
-    ip_cidr_range = "10.0.2.0/24"  # Changed back to /24 for valid CIDR
+    ip_cidr_range = "10.0.8.0/22"  # Changed to a larger range
   }
 
   lifecycle {
@@ -108,20 +108,20 @@ resource "google_compute_firewall" "iap_ssh" {
 # Create VM instance
 resource "google_compute_instance" "vm_instance" {
   name         = "${var.project_id}-bastion"
-  machine_type = "e2-medium"
+  machine_type = "e2-micro"
   zone         = "${var.region}-a"
   project      = var.project_id
 
   boot_disk {
     initialize_params {
       image = "ubuntu-os-cloud/ubuntu-2204-lts"
-      size  = 30
+      size  = 10
     }
   }
 
   network_interface {
     network    = google_compute_network.vpc_network.name
-    subnetwork = google_compute_subnetwork.subnet.name  # Added subnet specification
+    subnetwork = google_compute_subnetwork.subnet.name
     access_config {
       // Ephemeral public IP
     }
@@ -334,9 +334,6 @@ resource "google_container_cluster" "primary" {
   location = var.region
   project  = var.project_id
 
-  # We can't create a cluster with no node pool defined, but we want to only use
-  # separately managed node pools. So we create the smallest possible default
-  # node pool and immediately delete it.
   remove_default_node_pool = true
   initial_node_count       = 1
 
@@ -395,7 +392,7 @@ resource "google_container_node_pool" "primary_nodes" {
   location   = var.region
   cluster    = google_container_cluster.primary.name
   project    = var.project_id
-  node_count = var.node_count
+  node_count = 1
 
   node_config {
     machine_type = var.node_machine_type
@@ -414,8 +411,8 @@ resource "google_container_node_pool" "primary_nodes" {
   }
 
   autoscaling {
-    min_node_count = var.node_count
-    max_node_count = var.node_count + 2
+    min_node_count = 1
+    max_node_count = 2
   }
 
   timeouts {
@@ -521,11 +518,120 @@ output "setup_and_access_instructions" {
   description = "Comprehensive setup and access instructions for the infrastructure"
 }
 
+# Add Helm provider
+provider "helm" {
+  kubernetes {
+    host                   = "https://${google_container_cluster.primary.endpoint}"
+    token                  = data.google_client_config.default.access_token
+    cluster_ca_certificate = base64decode(google_container_cluster.primary.master_auth[0].cluster_ca_certificate)
+  }
+}
+
+# Get GCP credentials
+data "google_client_config" "default" {}
+
+# Create namespace for ArgoCD
+resource "kubernetes_namespace" "argocd" {
+  metadata {
+    name = "argocd"
+  }
+
+  depends_on = [
+    google_container_cluster.primary,
+    google_container_node_pool.primary_nodes
+  ]
+}
+
+# Install ArgoCD using Helm
+resource "helm_release" "argocd" {
+  name       = "argocd"
+  repository = "https://argoproj.github.io/argo-helm"
+  chart      = "argo-cd"
+  namespace  = kubernetes_namespace.argocd.metadata[0].name
+  version    = "5.51.4"  # Latest stable version
+
+  values = [
+    <<-EOT
+    server:
+      extraArgs:
+        - --insecure
+      config:
+        url: https://argocd.${var.project_id}.svc.id.goog
+      service:
+        type: ClusterIP
+      ingress:
+        enabled: true
+        annotations:
+          kubernetes.io/ingress.class: nginx
+          cert-manager.io/cluster-issuer: letsencrypt-prod
+        hosts:
+          - argocd.${var.project_id}.svc.id.goog
+        tls:
+          - secretName: argocd-server-tls
+            hosts:
+              - argocd.${var.project_id}.svc.id.goog
+    configs:
+      secret:
+        argocdServerAdminPassword: "$2a$10$mYaJ1yF9yF9yF9yF9yF9yO"  # Default password: admin
+      cm:
+        url: https://argocd.${var.project_id}.svc.id.goog
+    repoServer:
+      serviceAccount:
+        create: true
+        name: argocd-repo-server
+    applicationSet:
+      enabled: true
+    notifications:
+      enabled: true
+    EOT
+  ]
+
+  depends_on = [
+    kubernetes_namespace.argocd,
+    google_container_cluster.primary,
+    google_container_node_pool.primary_nodes
+  ]
+}
+
+# Add ArgoCD output
+output "argocd_info" {
+  value = {
+    namespace = kubernetes_namespace.argocd.metadata[0].name
+    version   = helm_release.argocd.version
+    access_url = "https://argocd.${var.project_id}.svc.id.goog"
+    admin_password = "admin"  # Default password, should be changed after first login
+    setup_instructions = <<-EOT
+      To access ArgoCD:
+
+      1. Port-forward the ArgoCD server:
+         kubectl port-forward svc/argocd-server -n argocd 8080:443
+
+      2. Get the admin password:
+         kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath="{.data.password}" | base64 -d
+
+      3. Access the UI at https://localhost:8080
+         Username: admin
+         Password: (from step 2)
+
+      4. Change the admin password after first login
+    EOT
+  }
+  description = "Information about the ArgoCD installation"
+}
+
 terraform {
   required_providers {
     google = {
       source  = "hashicorp/google"
-      version = "~> 6.0" # Update to use version 6.x
+      version = "~> 6.0"
+    }
+    helm = {
+      source  = "hashicorp/helm"
+      version = "~> 2.12"
+    }
+    kubernetes = {
+      source  = "hashicorp/kubernetes"
+      version = "~> 2.25"
     }
   }
 

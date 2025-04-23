@@ -1,19 +1,19 @@
 variable "project_id" {
-  description = "The GCP project ID"
+  description = "The project ID to deploy to"
   type        = string
   default     = "sylvan-apogee-450014-a6"
 }
 
 variable "region" {
-  description = "The GCP region"
+  description = "The region to deploy to"
   type        = string
-  default     = "us-central1"
+  default     = "us-east1"  # Changed from us-central1 to us-east1 for better capacity
 }
 
 variable "zone" {
-  description = "The GCP zone"
+  description = "The zone to deploy to"
   type        = string
-  default     = "us-central1-a"
+  default     = "us-east1-b"  # Changed to match new region
 }
 
 variable "allowed_ssh_ranges" {
@@ -47,7 +47,7 @@ variable "instance_name" {
 }
 
 variable "machine_type" {
-  description = "Machine type for the bastion instance"
+  description = "The machine type for the bastion VM"
   type        = string
   default     = "e2-micro"
 }
@@ -71,17 +71,17 @@ variable "provider_id" {
 }
 
 variable "github_repo" {
-  description = "The GitHub repository in format 'owner/repo'"
+  description = "GitHub repository name"
   type        = string
 }
 
 variable "support_email" {
-  description = "Support email for IAP OAuth consent screen"
+  description = "Email address for support"
   type        = string
 }
 
 variable "iap_authorized_users" {
-  description = "List of users authorized to use IAP tunnel (e.g., ['user:example@gmail.com'])"
+  description = "List of IAP authorized users"
   type        = list(string)
 }
 
@@ -117,19 +117,19 @@ variable "cluster_zone" {
 variable "node_machine_type" {
   description = "Machine type for GKE nodes"
   type        = string
-  default     = "e2-medium"
+  default     = "e2-standard-2"  # Changed from e2-small to e2-standard-2 for better availability
 }
 
 variable "node_count" {
   description = "Number of nodes in the GKE node pool"
   type        = number
-  default     = 2
+  default     = 1
 }
 
 variable "node_disk_size" {
   description = "Disk size for GKE nodes in GB"
   type        = number
-  default     = 30
+  default     = 20
 }
 
 variable "node_tags" {
@@ -139,18 +139,23 @@ variable "node_tags" {
 }
 
 variable "user_email" {
-  description = "Email of the user for SSH access"
+  description = "Email address of the user"
   type        = string
 }
 
 variable "ssh_user" {
-  description = "Username for SSH access to cluster nodes"
+  description = "SSH user for the bastion VM"
   type        = string
   default     = "ubuntu"
 }
 
 variable "ssh_pub_key_path" {
-  description = "Path to the public SSH key file"
+  description = "Path to the SSH public key"
   type        = string
-  default     = "~/.ssh/id_rsa.pub"
+}
+
+variable "subnet_cidr" {
+  description = "CIDR range for the subnet"
+  type        = string
+  default     = "10.0.0.0/24"
 }
