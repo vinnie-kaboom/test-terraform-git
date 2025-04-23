@@ -168,6 +168,8 @@ jobs:
       - name: 'Terraform Init'
         run: |
           cd terraform-test
+          # Set GOOGLE_APPLICATION_CREDENTIALS to the credentials file created by the auth action
+          export GOOGLE_APPLICATION_CREDENTIALS="${{ env.GOOGLE_GHA_CREDS_PATH }}"
           terraform init -reconfigure
 
       - name: 'Generate SSH Key'
