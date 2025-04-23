@@ -15,8 +15,25 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: 'Initial Auth to GCP'
+        uses: 'google-github-actions/auth@v1'
+        with:
+          workload_identity_provider: '${{ secrets.INITIAL_WORKLOAD_IDENTITY_PROVIDER }}'
+          service_account: '${{ secrets.INITIAL_SERVICE_ACCOUNT }}'
+          token_format: 'access_token'
+          create_credentials_file: true
+          project_id: 'sylvan-apogee-450014-a6'
+
       - name: 'Set up Cloud SDK'
         uses: 'google-github-actions/setup-gcloud@v1'
+
+      - name: 'Verify Authentication'
+        run: |
+          echo "=== Authentication Status ==="
+          gcloud auth list
+          echo ""
+          echo "=== Current Configuration ==="
+          gcloud config list
 
       - name: 'Setup Terraform'
         uses: hashicorp/setup-terraform@v2
@@ -24,6 +41,8 @@ jobs:
       - name: 'Terraform Init'
         run: |
           cd terraform-test
+          # Set GOOGLE_APPLICATION_CREDENTIALS to the credentials file created by the auth action
+          export GOOGLE_APPLICATION_CREDENTIALS="${{ env.GOOGLE_GHA_CREDS_PATH }}"
           terraform init -reconfigure
 
       - name: 'Terraform Plan Destroy'
