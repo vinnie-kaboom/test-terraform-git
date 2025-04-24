@@ -32,6 +32,24 @@ resource "google_service_account" "vm_service_account" {
   depends_on = [google_project_service.required_apis]
 }
 
+# Add IAP service account permissions
+resource "google_project_iam_member" "iap_tunnel_resource_accessor" {
+  project = var.project_id
+  role    = "roles/iap.tunnelResourceAccessor"
+  member  = "serviceAccount:service-${data.google_project.project.number}@gcp-sa-iap.iam.gserviceaccount.com"
+}
+
+resource "google_project_iam_member" "iap_service_agent" {
+  project = var.project_id
+  role    = "roles/iap.serviceAgent"
+  member  = "serviceAccount:service-${data.google_project.project.number}@gcp-sa-iap.iam.gserviceaccount.com"
+}
+
+# Get project number
+data "google_project" "project" {
+  project_id = var.project_id
+}
+
 # Create VPC Network
 resource "google_compute_network" "vpc_network" {
   name                    = "${var.project_id}-vpc"
@@ -141,7 +159,9 @@ resource "google_compute_instance" "vm_instance" {
   depends_on = [
     google_compute_network.vpc_network,
     google_compute_subnetwork.subnet,
-    google_service_account.vm_service_account
+    google_service_account.vm_service_account,
+    google_project_iam_member.iap_tunnel_resource_accessor,
+    google_project_iam_member.iap_service_agent
   ]
 }
 
