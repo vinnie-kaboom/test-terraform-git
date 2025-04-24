@@ -518,114 +518,17 @@ output "setup_and_access_instructions" {
   description = "Comprehensive setup and access instructions for the infrastructure"
 }
 
-# Add Kubernetes provider
-provider "kubernetes" {
-  host                   = "https://${google_container_cluster.primary.endpoint}"
-  token                  = data.google_client_config.default.access_token
-  cluster_ca_certificate = base64decode(google_container_cluster.primary.master_auth[0].cluster_ca_certificate)
+# Add outputs for cluster information
+output "kubernetes_cluster_name" {
+  value = google_container_cluster.primary.name
 }
 
-# Add Helm provider
-provider "helm" {
-  kubernetes {
-    host                   = "https://${google_container_cluster.primary.endpoint}"
-    token                  = data.google_client_config.default.access_token
-    cluster_ca_certificate = base64decode(google_container_cluster.primary.master_auth[0].cluster_ca_certificate)
-  }
+output "kubernetes_cluster_region" {
+  value = google_container_cluster.primary.location
 }
 
-# Get GCP credentials
-data "google_client_config" "default" {}
-
-# Create namespace for ArgoCD
-resource "kubernetes_namespace" "argocd" {
-  metadata {
-    name = "argocd"
-  }
-
-  depends_on = [
-    google_container_cluster.primary,
-    google_container_node_pool.primary_nodes,
-    google_project_service.required_apis
-  ]
-}
-
-# Install ArgoCD using Helm
-resource "helm_release" "argocd" {
-  name       = "argocd"
-  repository = "https://argoproj.github.io/argo-helm"
-  chart      = "argo-cd"
-  namespace  = kubernetes_namespace.argocd.metadata[0].name
-  version    = "5.51.4"  # Latest stable version
-
-  values = [
-    <<-EOT
-    server:
-      extraArgs:
-        - --insecure
-      config:
-        url: https://argocd.${var.project_id}.svc.id.goog
-      service:
-        type: ClusterIP
-      ingress:
-        enabled: true
-        annotations:
-          kubernetes.io/ingress.class: nginx
-          cert-manager.io/cluster-issuer: letsencrypt-prod
-        hosts:
-          - argocd.${var.project_id}.svc.id.goog
-        tls:
-          - secretName: argocd-server-tls
-            hosts:
-              - argocd.${var.project_id}.svc.id.goog
-    configs:
-      secret:
-        argocdServerAdminPassword: "$2a$10$mYaJ1yF9yF9yF9yF9yF9yO"  # Default password: admin
-      cm:
-        url: https://argocd.${var.project_id}.svc.id.goog
-    repoServer:
-      serviceAccount:
-        create: true
-        name: argocd-repo-server
-    applicationSet:
-      enabled: true
-    notifications:
-      enabled: true
-    EOT
-  ]
-
-  depends_on = [
-    kubernetes_namespace.argocd,
-    google_container_cluster.primary,
-    google_container_node_pool.primary_nodes,
-    google_project_service.required_apis
-  ]
-}
-
-# Add ArgoCD output
-output "argocd_info" {
-  value = {
-    namespace = kubernetes_namespace.argocd.metadata[0].name
-    version   = helm_release.argocd.version
-    access_url = "https://argocd.${var.project_id}.svc.id.goog"
-    admin_password = "admin"  # Default password, should be changed after first login
-    setup_instructions = <<-EOT
-      To access ArgoCD:
-
-      1. Port-forward the ArgoCD server:
-         kubectl port-forward svc/argocd-server -n argocd 8080:443
-
-      2. Get the admin password:
-         kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath="{.data.password}" | base64 -d
-
-      3. Access the UI at https://localhost:8080
-         Username: admin
-         Password: (from step 2)
-
-      4. Change the admin password after first login
-    EOT
-  }
-  description = "Information about the ArgoCD installation"
+output "project_id" {
+  value = var.project_id
 }
 
 terraform {
@@ -633,14 +536,6 @@ terraform {
     google = {
       source  = "hashicorp/google"
       version = "~> 6.0"
-    }
-    helm = {
-      source  = "hashicorp/helm"
-      version = "~> 2.12"
-    }
-    kubernetes = {
-      source  = "hashicorp/kubernetes"
-      version = "~> 2.25"
     }
   }
 
