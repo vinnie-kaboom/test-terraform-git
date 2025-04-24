@@ -204,10 +204,14 @@ jobs:
       - name: 'Get Cluster Credentials'
         if: github.ref == 'refs/heads/main' && github.event_name == 'push'
         run: |
+          # Set project ID
+          PROJECT_ID="sylvan-apogee-450014-a6"
+          gcloud config set project $PROJECT_ID
+          
           # Get cluster name and region from Terraform output
+          cd terraform-test
           CLUSTER_NAME=$(terraform output -raw kubernetes_cluster_name)
           CLUSTER_REGION=$(terraform output -raw kubernetes_cluster_region)
-          PROJECT_ID=$(terraform output -raw project_id)
           
           # Get cluster credentials
           gcloud container clusters get-credentials $CLUSTER_NAME \
@@ -221,11 +225,15 @@ jobs:
       - name: 'Create ArgoCD Namespace'
         if: github.ref == 'refs/heads/main' && github.event_name == 'push'
         run: |
+          cd terraform-test
           kubectl create namespace argocd --dry-run=client -o yaml | kubectl apply -f -
 
       - name: 'Install ArgoCD'
         if: github.ref == 'refs/heads/main' && github.event_name == 'push'
         run: |
+          cd terraform-test
+          PROJECT_ID="sylvan-apogee-450014-a6"
+          
           # Add ArgoCD Helm repository
           helm repo add argo https://argoproj.github.io/argo-helm
           helm repo update
@@ -235,16 +243,16 @@ jobs:
             --namespace argocd \
             --version 5.51.4 \
             --set server.extraArgs[0]="--insecure" \
-            --set server.config.url="https://argocd.$(terraform output -raw project_id).svc.id.goog" \
+            --set server.config.url="https://argocd.$PROJECT_ID.svc.id.goog" \
             --set server.service.type="ClusterIP" \
             --set server.ingress.enabled=true \
             --set server.ingress.annotations."kubernetes\.io/ingress\.class"="nginx" \
             --set server.ingress.annotations."cert-manager\.io/cluster-issuer"="letsencrypt-prod" \
-            --set server.ingress.hosts[0]="argocd.$(terraform output -raw project_id).svc.id.goog" \
+            --set server.ingress.hosts[0]="argocd.$PROJECT_ID.svc.id.goog" \
             --set server.ingress.tls[0].secretName="argocd-server-tls" \
-            --set server.ingress.tls[0].hosts[0]="argocd.$(terraform output -raw project_id).svc.id.goog" \
+            --set server.ingress.tls[0].hosts[0]="argocd.$PROJECT_ID.svc.id.goog" \
             --set configs.secret.argocdServerAdminPassword="$2a$10$mYaJ1yF9yF9yF9yF9yF9yO" \
-            --set configs.cm.url="https://argocd.$(terraform output -raw project_id).svc.id.goog" \
+            --set configs.cm.url="https://argocd.$PROJECT_ID.svc.id.goog" \
             --set repoServer.serviceAccount.create=true \
             --set repoServer.serviceAccount.name="argocd-repo-server" \
             --set applicationSet.enabled=true \
