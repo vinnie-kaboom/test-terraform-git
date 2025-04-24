@@ -165,6 +165,15 @@ jobs:
         with:
           terraform_version: "1.7.0"
 
+      - name: 'Install GKE Auth Plugin'
+        run: |
+          # Install the GKE auth plugin
+          sudo apt-get update
+          sudo apt-get install -y google-cloud-sdk-gke-gcloud-auth-plugin
+          
+          # Verify installation
+          gke-gcloud-auth-plugin --version
+
       - name: 'Terraform Init'
         run: |
           cd terraform-test
