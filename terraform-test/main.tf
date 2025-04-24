@@ -13,7 +13,8 @@ resource "google_project_service" "required_apis" {
   for_each = toset([
     "compute.googleapis.com",
     "iam.googleapis.com",
-    "container.googleapis.com"
+    "container.googleapis.com",
+    "iap.googleapis.com"
   ])
 
   project = var.project_id
@@ -36,13 +37,12 @@ resource "google_service_account" "vm_service_account" {
 resource "google_project_iam_member" "iap_tunnel_resource_accessor" {
   project = var.project_id
   role    = "roles/iap.tunnelResourceAccessor"
-  member  = "serviceAccount:service-${data.google_project.project.number}@gcp-sa-iap.iam.gserviceaccount.com"
-}
+  member  = "serviceAccount:${google_service_account.vm_service_account.email}"
 
-resource "google_project_iam_member" "iap_service_agent" {
-  project = var.project_id
-  role    = "roles/iap.serviceAgent"
-  member  = "serviceAccount:service-${data.google_project.project.number}@gcp-sa-iap.iam.gserviceaccount.com"
+  depends_on = [
+    google_project_service.required_apis,
+    google_service_account.vm_service_account
+  ]
 }
 
 # Get project number
@@ -160,8 +160,7 @@ resource "google_compute_instance" "vm_instance" {
     google_compute_network.vpc_network,
     google_compute_subnetwork.subnet,
     google_service_account.vm_service_account,
-    google_project_iam_member.iap_tunnel_resource_accessor,
-    google_project_iam_member.iap_service_agent
+    google_project_iam_member.iap_tunnel_resource_accessor
   ]
 }
 
