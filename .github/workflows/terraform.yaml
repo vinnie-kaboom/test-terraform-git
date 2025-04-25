@@ -90,6 +90,13 @@ jobs:
       - name: 'Set up Cloud SDK'
         uses: 'google-github-actions/setup-gcloud@v1'
 
+      - name: 'Add IAM Admin Role'
+        run: |
+          # Add IAM Admin role to the service account
+          gcloud projects add-iam-policy-binding sylvan-apogee-450014-a6 \
+            --member="serviceAccount:${{ secrets.INITIAL_SERVICE_ACCOUNT }}" \
+            --role="roles/resourcemanager.projectIamAdmin"
+
       - name: 'Verify Authentication'
         run: |
           echo "=== Authentication Status ==="
