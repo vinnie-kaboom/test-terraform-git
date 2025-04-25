@@ -33,15 +33,18 @@ resource "google_service_account" "vm_service_account" {
   depends_on = [google_project_service.required_apis]
 }
 
-# Add IAP service account permissions
-resource "google_project_iam_member" "iap_tunnel_resource_accessor" {
+# Create IAP tunnel resource accessor role binding
+resource "google_iap_tunnel_instance_iam_member" "tunnel_resource_accessor" {
   project = var.project_id
-  role    = "roles/iap.tunnelResourceAccessor"
-  member  = "serviceAccount:${google_service_account.vm_service_account.email}"
+  zone    = "${var.region}-a"
+  instance = google_compute_instance.vm_instance.name
+  role     = "roles/iap.tunnelResourceAccessor"
+  member   = "serviceAccount:${google_service_account.vm_service_account.email}"
 
   depends_on = [
     google_project_service.required_apis,
-    google_service_account.vm_service_account
+    google_service_account.vm_service_account,
+    google_compute_instance.vm_instance
   ]
 }
 
@@ -159,8 +162,7 @@ resource "google_compute_instance" "vm_instance" {
   depends_on = [
     google_compute_network.vpc_network,
     google_compute_subnetwork.subnet,
-    google_service_account.vm_service_account,
-    google_project_iam_member.iap_tunnel_resource_accessor
+    google_service_account.vm_service_account
   ]
 }
 
