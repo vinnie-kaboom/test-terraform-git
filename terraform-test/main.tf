@@ -38,10 +38,17 @@ data "google_project" "project" {
   project_id = var.project_id
 }
 
-# Get existing VPC
-data "google_compute_network" "vpc_network" {
-  name    = "${var.project_id}-vpc"
-  project = var.project_id
+# Create VPC Network
+resource "google_compute_network" "vpc_network" {
+  name                    = "${var.project_id}-vpc"
+  project                 = var.project_id
+  auto_create_subnetworks = false  # Changed to false to prevent automatic subnet creation
+
+  lifecycle {
+    ignore_changes = [
+      name
+    ]
+  }
 }
 
 # Create subnet for cluster nodes
@@ -49,7 +56,7 @@ resource "google_compute_subnetwork" "subnet" {
   name          = "${var.project_id}-subnet"
   project       = var.project_id
   region        = var.region
-  network       = data.google_compute_network.vpc_network.name
+  network       = google_compute_network.vpc_network.name
   ip_cidr_range = "10.0.0.0/22"  # Increased from /24 to /22 for more IPs
 
   secondary_ip_range {
@@ -72,7 +79,7 @@ resource "google_compute_subnetwork" "subnet" {
 # Create firewall rule for SSH access
 resource "google_compute_firewall" "bastion-ssh" {
   name    = "${var.project_id}-allow-bastion-ssh"
-  network = data.google_compute_network.vpc_network.name
+  network = google_compute_network.vpc_network.name
   project = var.project_id
 
   allow {
@@ -91,7 +98,7 @@ resource "google_compute_firewall" "bastion-ssh" {
 # Add IAP firewall rule
 resource "google_compute_firewall" "iap_ssh" {
   name    = "${var.project_id}-allow-iap-ssh"
-  network = data.google_compute_network.vpc_network.name
+  network = google_compute_network.vpc_network.name
   project = var.project_id
 
   allow {
@@ -119,7 +126,7 @@ resource "google_compute_instance" "vm_instance" {
   }
 
   network_interface {
-    network    = data.google_compute_network.vpc_network.name
+    network    = google_compute_network.vpc_network.name
     subnetwork = google_compute_subnetwork.subnet.name
     access_config {
       // Ephemeral public IP
@@ -138,6 +145,7 @@ resource "google_compute_instance" "vm_instance" {
   tags = ["bastion", "ssh"]
 
   depends_on = [
+    google_compute_network.vpc_network,
     google_compute_subnetwork.subnet,
     google_service_account.vm_service_account
   ]
@@ -295,8 +303,8 @@ output "connection_details" {
 
 output "vpc_network_details" {
   value = {
-    name = data.google_compute_network.vpc_network.name
-    id   = data.google_compute_network.vpc_network.id
+    name = google_compute_network.vpc_network.name
+    id   = google_compute_network.vpc_network.id
   }
 }
 
@@ -326,7 +334,7 @@ resource "google_container_cluster" "primary" {
   remove_default_node_pool = true
   initial_node_count       = 1
 
-  network    = data.google_compute_network.vpc_network.name
+  network    = google_compute_network.vpc_network.name
   subnetwork = google_compute_subnetwork.subnet.name
 
   private_cluster_config {
