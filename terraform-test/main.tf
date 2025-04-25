@@ -33,46 +33,15 @@ resource "google_service_account" "vm_service_account" {
   depends_on = [google_project_service.required_apis]
 }
 
-# Add IAP service account permissions
-resource "google_project_iam_member" "iap_tunnel_resource_accessor" {
-  project = var.project_id
-  role    = "roles/iap.tunnelResourceAccessor"
-  member  = "serviceAccount:${google_service_account.vm_service_account.email}"
-
-  depends_on = [
-    google_project_service.required_apis,
-    google_service_account.vm_service_account
-  ]
-}
-
-# Add IAP Admin role
-resource "google_project_iam_member" "iap_admin" {
-  project = var.project_id
-  role    = "roles/iap.admin"
-  member  = "serviceAccount:${google_service_account.vm_service_account.email}"
-
-  depends_on = [
-    google_project_service.required_apis,
-    google_service_account.vm_service_account
-  ]
-}
-
 # Get project number
 data "google_project" "project" {
   project_id = var.project_id
 }
 
-# Create VPC Network
-resource "google_compute_network" "vpc_network" {
-  name                    = "${var.project_id}-vpc"
-  project                 = var.project_id
-  auto_create_subnetworks = false  # Changed to false to prevent automatic subnet creation
-
-  lifecycle {
-    ignore_changes = [
-      name
-    ]
-  }
+# Get existing VPC
+data "google_compute_network" "vpc_network" {
+  name    = "${var.project_id}-vpc"
+  project = var.project_id
 }
 
 # Create subnet for cluster nodes
@@ -80,7 +49,7 @@ resource "google_compute_subnetwork" "subnet" {
   name          = "${var.project_id}-subnet"
   project       = var.project_id
   region        = var.region
-  network       = google_compute_network.vpc_network.name
+  network       = data.google_compute_network.vpc_network.name
   ip_cidr_range = "10.0.0.0/22"  # Increased from /24 to /22 for more IPs
 
   secondary_ip_range {
@@ -103,7 +72,7 @@ resource "google_compute_subnetwork" "subnet" {
 # Create firewall rule for SSH access
 resource "google_compute_firewall" "bastion-ssh" {
   name    = "${var.project_id}-allow-bastion-ssh"
-  network = google_compute_network.vpc_network.name
+  network = data.google_compute_network.vpc_network.name
   project = var.project_id
 
   allow {
@@ -122,7 +91,7 @@ resource "google_compute_firewall" "bastion-ssh" {
 # Add IAP firewall rule
 resource "google_compute_firewall" "iap_ssh" {
   name    = "${var.project_id}-allow-iap-ssh"
-  network = google_compute_network.vpc_network.name
+  network = data.google_compute_network.vpc_network.name
   project = var.project_id
 
   allow {
@@ -135,22 +104,22 @@ resource "google_compute_firewall" "iap_ssh" {
   target_tags   = ["bastion-host"]
 }
 
-# Create VM instance
+# Create bastion VM
 resource "google_compute_instance" "vm_instance" {
   name         = "${var.project_id}-bastion"
-  machine_type = "e2-micro"
+  machine_type = "e2-micro"  # Changed from e2-medium to e2-micro
   zone         = "${var.region}-a"
   project      = var.project_id
 
   boot_disk {
     initialize_params {
       image = "ubuntu-os-cloud/ubuntu-2204-lts"
-      size  = 10
+      size  = 10  # Reduced from 30GB to 10GB
     }
   }
 
   network_interface {
-    network    = google_compute_network.vpc_network.name
+    network    = data.google_compute_network.vpc_network.name
     subnetwork = google_compute_subnetwork.subnet.name
     access_config {
       // Ephemeral public IP
@@ -169,11 +138,8 @@ resource "google_compute_instance" "vm_instance" {
   tags = ["bastion", "ssh"]
 
   depends_on = [
-    google_compute_network.vpc_network,
     google_compute_subnetwork.subnet,
-    google_service_account.vm_service_account,
-    google_project_iam_member.iap_tunnel_resource_accessor,
-    google_project_iam_member.iap_admin
+    google_service_account.vm_service_account
   ]
 }
 
@@ -329,18 +295,9 @@ output "connection_details" {
 
 output "vpc_network_details" {
   value = {
-    name = google_compute_network.vpc_network.name
-    id   = google_compute_network.vpc_network.id
+    name = data.google_compute_network.vpc_network.name
+    id   = data.google_compute_network.vpc_network.id
   }
-}
-
-# Make sure IAP API is enabled
-resource "google_project_service" "iap_api" {
-  project = var.project_id
-  service = "iap.googleapis.com"
-
-  disable_dependent_services = false
-  disable_on_destroy         = false
 }
 
 # Add output to show manual IAM setup instructions
@@ -369,7 +326,7 @@ resource "google_container_cluster" "primary" {
   remove_default_node_pool = true
   initial_node_count       = 1
 
-  network    = google_compute_network.vpc_network.name
+  network    = data.google_compute_network.vpc_network.name
   subnetwork = google_compute_subnetwork.subnet.name
 
   private_cluster_config {
