@@ -274,31 +274,14 @@ output "ssh_keys_bucket" {
   }
 }
 
-# Update the output to show simplified connection instructions
+# Add output for connection details
 output "connection_details" {
   value = {
-    instance_name      = google_compute_instance.vm_instance.name
-    zone               = google_compute_instance.vm_instance.zone
-    project_id         = var.project_id
-    connect_command    = "gcloud compute ssh ${google_compute_instance.vm_instance.name} --project=${var.project_id} --zone=${google_compute_instance.vm_instance.zone} --tunnel-through-iap"
-    setup_instructions = <<-EOT
-      To connect to your VM:
-
-      1. Make sure you're logged into gcloud:
-         gcloud auth login
-
-      2. Run this command:
-         gcloud compute ssh ${google_compute_instance.vm_instance.name} \
-           --project=${var.project_id} \
-           --zone=${google_compute_instance.vm_instance.zone} \
-           --tunnel-through-iap
-
-      3. On first login, you'll set up 2FA with Google Authenticator
-      4. Future logins will require your 2FA code
-
-      Note: If you get permission errors, run the commands shown in the post_setup_instructions output.
-    EOT
+    instance_name = google_compute_instance.vm_instance.name
+    zone         = google_compute_instance.vm_instance.zone
+    project_id   = var.project_id
   }
+  description = "Connection details for the bastion VM"
 }
 
 output "vpc_network_details" {
@@ -515,7 +498,7 @@ output "setup_and_access_instructions" {
   description = "Comprehensive setup and access instructions for the infrastructure"
 }
 
-# Add outputs for cluster information
+# Add output for cluster information
 output "kubernetes_cluster_name" {
   value = google_container_cluster.primary.name
 }

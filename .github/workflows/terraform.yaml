@@ -225,8 +225,8 @@ jobs:
           cd terraform-test
           CLUSTER_NAME=$(terraform output -raw kubernetes_cluster_name)
           CLUSTER_REGION=$(terraform output -raw kubernetes_cluster_region)
-          BASTION_NAME=$(terraform output -raw connection_details | jq -r '.instance_name')
-          BASTION_ZONE=$(terraform output -raw connection_details | jq -r '.zone')
+          BASTION_NAME=$(terraform output -json connection_details | jq -r '.instance_name')
+          BASTION_ZONE=$(terraform output -json connection_details | jq -r '.zone')
           
           # Get cluster credentials through bastion
           gcloud container clusters get-credentials $CLUSTER_NAME \
