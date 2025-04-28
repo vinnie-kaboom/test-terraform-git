@@ -228,14 +228,22 @@ jobs:
           BASTION_NAME=$(terraform output -json connection_details | jq -r '.instance_name')
           BASTION_ZONE=$(terraform output -json connection_details | jq -r '.zone')
           
-          # Get cluster credentials through bastion
+          # Get cluster credentials
           gcloud container clusters get-credentials $CLUSTER_NAME \
             --region $CLUSTER_REGION \
             --project $PROJECT_ID \
-            --internal-ip \
-            --tunnel-through-iap \
-            --tunnel-through-iap-host=$BASTION_NAME \
-            --tunnel-through-iap-zone=$BASTION_ZONE
+            --internal-ip
+          
+          # Set up kubectl to use the bastion as a proxy
+          BASTION_IP=$(gcloud compute instances describe $BASTION_NAME \
+            --zone=$BASTION_ZONE \
+            --project=$PROJECT_ID \
+            --format='get(networkInterfaces[0].networkIP)')
+          
+          # Update kubeconfig to use the bastion as a proxy
+          kubectl config set-cluster gke_${PROJECT_ID}_${CLUSTER_REGION}_${CLUSTER_NAME} \
+            --server=https://$BASTION_IP:6443 \
+            --insecure-skip-tls-verify=true
           
           # Verify cluster access
           kubectl get nodes
