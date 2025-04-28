@@ -234,15 +234,15 @@ jobs:
             --project $PROJECT_ID \
             --internal-ip
           
-          # Set up kubectl to use the bastion as a proxy
-          BASTION_IP=$(gcloud compute instances describe $BASTION_NAME \
-            --zone=$BASTION_ZONE \
-            --project=$PROJECT_ID \
-            --format='get(networkInterfaces[0].networkIP)')
+          # Get the cluster's internal IP
+          CLUSTER_IP=$(gcloud container clusters describe $CLUSTER_NAME \
+            --region $CLUSTER_REGION \
+            --project $PROJECT_ID \
+            --format='get(privateClusterConfig.privateEndpoint)')
           
-          # Update kubeconfig to use the bastion as a proxy
+          # Update kubeconfig to use the cluster's internal IP
           kubectl config set-cluster gke_${PROJECT_ID}_${CLUSTER_REGION}_${CLUSTER_NAME} \
-            --server=https://$BASTION_IP:6443 \
+            --server=https://$CLUSTER_IP:443 \
             --insecure-skip-tls-verify=true
           
           # Verify cluster access
