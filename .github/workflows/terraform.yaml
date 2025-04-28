@@ -225,12 +225,17 @@ jobs:
           cd terraform-test
           CLUSTER_NAME=$(terraform output -raw kubernetes_cluster_name)
           CLUSTER_REGION=$(terraform output -raw kubernetes_cluster_region)
+          BASTION_NAME=$(terraform output -raw connection_details | jq -r '.instance_name')
+          BASTION_ZONE=$(terraform output -raw connection_details | jq -r '.zone')
           
-          # Get cluster credentials
+          # Get cluster credentials through bastion
           gcloud container clusters get-credentials $CLUSTER_NAME \
             --region $CLUSTER_REGION \
             --project $PROJECT_ID \
-            --internal-ip
+            --internal-ip \
+            --tunnel-through-iap \
+            --tunnel-through-iap-host=$BASTION_NAME \
+            --tunnel-through-iap-zone=$BASTION_ZONE
           
           # Verify cluster access
           kubectl get nodes
