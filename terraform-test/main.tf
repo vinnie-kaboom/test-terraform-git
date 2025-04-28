@@ -308,6 +308,23 @@ output "post_setup_instructions" {
   EOT
 }
 
+# Create firewall rule to allow traffic from bastion to GKE
+resource "google_compute_firewall" "bastion_to_gke" {
+  name    = "${var.project_id}-allow-bastion-to-gke"
+  network = google_compute_network.vpc_network.name
+  project = var.project_id
+
+  allow {
+    protocol = "tcp"
+    ports    = ["6443"]  # GKE API server port
+  }
+
+  source_tags = ["bastion"]
+  target_tags = ["gke-node"]
+
+  direction = "INGRESS"
+}
+
 # Create GKE cluster
 resource "google_container_cluster" "primary" {
   name     = "${var.project_id}-gke"
@@ -351,6 +368,7 @@ resource "google_container_cluster" "primary" {
     oauth_scopes = [
       "https://www.googleapis.com/auth/cloud-platform"
     ]
+    tags = ["gke-node"]  # Add tag for firewall rule
   }
 
   timeouts {
@@ -362,7 +380,8 @@ resource "google_container_cluster" "primary" {
   depends_on = [
     google_project_service.required_apis,
     google_compute_subnetwork.subnet,
-    google_service_account.vm_service_account
+    google_service_account.vm_service_account,
+    google_compute_firewall.bastion_to_gke
   ]
 }
 
