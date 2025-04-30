@@ -228,22 +228,43 @@ jobs:
           BASTION_NAME=$(terraform output -json connection_details | jq -r '.instance_name')
           BASTION_ZONE=$(terraform output -json connection_details | jq -r '.zone')
           
-          # Get cluster credentials
+          # Get the bastion's internal IP
+          BASTION_IP=$(gcloud compute instances describe $BASTION_NAME \
+            --zone=$BASTION_ZONE \
+            --project=$PROJECT_ID \
+            --format='get(networkInterfaces[0].networkIP)')
+          
+          # Create SSH config for the bastion
+          mkdir -p ~/.ssh
+          cat > ~/.ssh/config << EOF
+          Host bastion
+            HostName $BASTION_IP
+            User ubuntu
+            StrictHostKeyChecking no
+            UserKnownHostsFile /dev/null
+            ProxyCommand gcloud compute ssh $BASTION_NAME \
+              --zone=$BASTION_ZONE \
+              --project=$PROJECT_ID \
+              --tunnel-through-iap \
+              --command="nc -w 120 %h %p"
+          EOF
+          
+          # Get cluster credentials through the bastion
           gcloud container clusters get-credentials $CLUSTER_NAME \
             --region $CLUSTER_REGION \
             --project $PROJECT_ID \
             --internal-ip
           
-          # Get the cluster's internal IP
-          CLUSTER_IP=$(gcloud container clusters describe $CLUSTER_NAME \
-            --region $CLUSTER_REGION \
-            --project $PROJECT_ID \
-            --format='get(privateClusterConfig.privateEndpoint)')
-          
-          # Update kubeconfig to use the cluster's internal IP
+          # Update kubeconfig to use the bastion as a proxy
           kubectl config set-cluster gke_${PROJECT_ID}_${CLUSTER_REGION}_${CLUSTER_NAME} \
-            --server=https://$CLUSTER_IP:443 \
+            --server=https://$BASTION_IP:6443 \
             --insecure-skip-tls-verify=true
+          
+          # Set up kubectl to use the bastion as a proxy
+          export HTTPS_PROXY="socks5://127.0.0.1:1080"
+          
+          # Start SSH tunnel in the background
+          ssh -f -N -D 1080 bastion
           
           # Verify cluster access
           kubectl get nodes
@@ -252,6 +273,7 @@ jobs:
         if: github.ref == 'refs/heads/main' && github.event_name == 'push'
         run: |
           cd terraform-test
+          export HTTPS_PROXY="socks5://127.0.0.1:1080"
           kubectl create namespace argocd --dry-run=client -o yaml | kubectl apply -f -
 
       - name: 'Install ArgoCD'
@@ -259,6 +281,7 @@ jobs:
         run: |
           cd terraform-test
           PROJECT_ID="sylvan-apogee-450014-a6"
+          export HTTPS_PROXY="socks5://127.0.0.1:1080"
           
           # Add ArgoCD Helm repository
           helm repo add argo https://argoproj.github.io/argo-helm
