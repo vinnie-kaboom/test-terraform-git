@@ -44,7 +44,47 @@ jobs:
           # Set GOOGLE_APPLICATION_CREDENTIALS to the credentials file created by the auth action
           export GOOGLE_APPLICATION_CREDENTIALS="${{ env.GOOGLE_GHA_CREDS_PATH }}"
           terraform init -reconfigure
-
+google_project_service.required_apis["iap.googleapis.com"]: Creating...
+google_project_service.required_apis["iam.googleapis.com"]: Creating...
+google_project_service.required_apis["container.googleapis.com"]: Creating...
+google_project_service.required_apis["compute.googleapis.com"]: Creating...
+google_compute_network.vpc_network: Creating...
+google_storage_bucket.ssh_keys_bucket: Creating...
+google_storage_bucket.ssh_keys_bucket: Creation complete after 1s [id=sylvan-apogee-450014-a6-ssh-keys]
+google_project_service.required_apis["container.googleapis.com"]: Creation complete after 3s [id=sylvan-apogee-450014-a6/container.googleapis.com]
+google_project_service.required_apis["iap.googleapis.com"]: Creation complete after 3s [id=sylvan-apogee-450014-a6/iap.googleapis.com]
+google_project_service.required_apis["compute.googleapis.com"]: Creation complete after 3s [id=sylvan-apogee-450014-a6/compute.googleapis.com]
+google_project_service.required_apis["iam.googleapis.com"]: Creation complete after 3s [id=sylvan-apogee-450014-a6/iam.googleapis.com]
+google_service_account.vm_service_account: Creating...
+google_service_account.vm_service_account: Still creating... [10s elapsed]
+google_service_account.vm_service_account: Creation complete after 14s [id=projects/sylvan-apogee-450014-a6/serviceAccounts/bastion-vm-sa@sylvan-apogee-450014-a6.iam.gserviceaccount.com]
+╷
+│ Error: Error creating Network: googleapi: Error 409: The resource 'projects/sylvan-apogee-450014-a6/global/networks/sylvan-apogee-450014-a6-vpc' already exists, alreadyExists
+│ 
+│   with google_compute_network.vpc_net CLOUDSDK_PROJECT: sylvan-apogee-450014-a6
+    GCLOUD_PROJECT: sylvan-apogee-450014-a6
+    GCP_PROJECT: sylvan-apogee-450014-a6
+    GOOGLE_CLOUD_PROJECT: sylvan-apogee-450014-a6
+    CLOUDSDK_METRICS_ENVIRONMENT: github-actions-setup-gcloud
+    CLOUDSDK_METRICS_ENVIRONMENT_VERSION: 1.1.1
+    TERRAFORM_CLI_PATH: /home/runner/work/_temp/2b3a7737-0634-469c-bcbe-a3caff7d3bde
+WARNING: Property [project] is overridden by environment setting [CLOUDSDK_CORE_PROJECT=sylvan-apogee-450014-a6]
+Updated property [core/project].
+Fetching cluster endpoint and auth data.
+kubeconfig entry generated for sylvan-apogee-450014-a6-gke.
+Cluster "gke_sylvan-apogee-450014-a6_us-central1_sylvan-apogee-450014-a6-gke" set.
+ERROR: gcloud crashed (NotImplementedError): SSH using federated workforce identities is not yet generally available (GA). Please use `gcloud beta compute ssh` to SSH using a third-party identity.
+If you would like to report this issue, please run the following command:
+  gcloud feedback
+To check gcloud for common problems, please run the following command:
+  gcloud info --run-diagnostics
+Connection closed by UNKNOWN port 65535work,
+│   on main.tf line 42, in resource "google_compute_network" "vpc_network":
+│   42: resource "google_compute_network" "vpc_network" {
+│ 
+╵
+Error: Terraform exited with code 1.
+Error: Process completed with exit code 1.
       - name: 'Terraform Plan Destroy'
         run: |
           cd terraform-test
@@ -66,3 +106,5 @@ jobs:
             -var="iap_authorized_users=[\"user:${EMAIL}\"]" \
             -var="github_repo=${{ github.repository }}" \
             -var="user_email=${{ secrets.AUTHORIZED_USER }}" 
+
+            
