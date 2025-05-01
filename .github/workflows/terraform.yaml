@@ -256,7 +256,7 @@ jobs:
             User ubuntu
             StrictHostKeyChecking no
             UserKnownHostsFile /dev/null
-            ProxyCommand gcloud compute ssh $BASTION_NAME \
+            ProxyCommand gcloud beta compute ssh $BASTION_NAME \
               --zone=$BASTION_ZONE \
               --project=$PROJECT_ID \
               --tunnel-through-iap \
