@@ -185,6 +185,20 @@ jobs:
           export GOOGLE_APPLICATION_CREDENTIALS="${{ env.GOOGLE_GHA_CREDS_PATH }}"
           terraform init -reconfigure
 
+      - name: 'Import Existing VPC'
+        run: |
+          cd terraform-test
+          PROJECT_ID="sylvan-apogee-450014-a6"
+          VPC_NAME="${PROJECT_ID}-vpc"
+          
+          # Check if VPC exists
+          if gcloud compute networks describe $VPC_NAME --project=$PROJECT_ID > /dev/null 2>&1; then
+            echo "Importing existing VPC network..."
+            terraform import google_compute_network.vpc_network projects/$PROJECT_ID/global/networks/$VPC_NAME
+          else
+            echo "VPC network does not exist, will be created by Terraform"
+          fi
+
       - name: 'Generate SSH Key'
         run: |
           mkdir -p ~/.ssh
