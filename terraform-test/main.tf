@@ -42,7 +42,7 @@ data "google_project" "project" {
 resource "google_compute_network" "vpc_network" {
   name                    = "${var.project_id}-vpc"
   project                 = var.project_id
-  auto_create_subnetworks = false  # Changed to false to prevent automatic subnet creation
+  auto_create_subnetworks = false  # Prevent automatic subnet creation
 
   lifecycle {
     ignore_changes = [
@@ -54,19 +54,21 @@ resource "google_compute_network" "vpc_network" {
 # Create subnet for cluster nodes
 resource "google_compute_subnetwork" "subnet" {
   name          = "${var.project_id}-subnet"
-  project       = var.project_id
+  ip_cidr_range = "10.0.0.0/24"
   region        = var.region
-  network       = google_compute_network.vpc_network.name
-  ip_cidr_range = "10.0.0.0/22"  # Increased from /24 to /22 for more IPs
+  network       = google_compute_network.vpc_network.id
+  project       = var.project_id
+
+  private_ip_google_access = true
 
   secondary_ip_range {
-    range_name    = "pod-range"
-    ip_cidr_range = "10.0.4.0/22"  # Changed to a larger range
+    range_name    = "pods"
+    ip_cidr_range = "172.16.0.0/20"
   }
 
   secondary_ip_range {
-    range_name    = "service-range"
-    ip_cidr_range = "10.0.8.0/22"  # Changed to a larger range
+    range_name    = "services"
+    ip_cidr_range = "172.16.16.0/24"
   }
 
   lifecycle {
@@ -114,14 +116,14 @@ resource "google_compute_firewall" "iap_ssh" {
 # Create bastion VM
 resource "google_compute_instance" "vm_instance" {
   name         = "${var.project_id}-bastion"
-  machine_type = "e2-micro"  # Changed from e2-medium to e2-micro
+  machine_type = "e2-micro"
   zone         = "${var.region}-a"
   project      = var.project_id
 
   boot_disk {
     initialize_params {
       image = "ubuntu-os-cloud/ubuntu-2204-lts"
-      size  = 10  # Reduced from 30GB to 10GB
+      size  = 10
     }
   }
 
@@ -284,6 +286,7 @@ output "connection_details" {
   description = "Connection details for the bastion VM"
 }
 
+# Update the output to include VPC details
 output "vpc_network_details" {
   value = {
     name = google_compute_network.vpc_network.name
@@ -344,8 +347,8 @@ resource "google_container_cluster" "primary" {
   }
 
   ip_allocation_policy {
-    cluster_secondary_range_name  = "pod-range"
-    services_secondary_range_name = "service-range"
+    cluster_secondary_range_name  = "pods"
+    services_secondary_range_name = "services"
   }
 
   master_authorized_networks_config {
@@ -368,7 +371,7 @@ resource "google_container_cluster" "primary" {
     oauth_scopes = [
       "https://www.googleapis.com/auth/cloud-platform"
     ]
-    tags = ["gke-node"]  # Add tag for firewall rule
+    tags = ["gke-node"]
   }
 
   timeouts {
@@ -379,6 +382,7 @@ resource "google_container_cluster" "primary" {
 
   depends_on = [
     google_project_service.required_apis,
+    google_compute_network.vpc_network,
     google_compute_subnetwork.subnet,
     google_service_account.vm_service_account,
     google_compute_firewall.bastion_to_gke
