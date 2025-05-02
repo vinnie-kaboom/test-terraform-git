@@ -78,7 +78,7 @@ resource "google_compute_subnetwork" "subnet" {
   }
 }
 
-# Create firewall rule for SSH acces
+# Create firewall rule for SSH access
 resource "google_compute_firewall" "bastion-ssh" {
   name    = "${var.project_id}-allow-bastion-ssh"
   network = google_compute_network.vpc_network.name
@@ -93,7 +93,11 @@ resource "google_compute_firewall" "bastion-ssh" {
   target_tags   = ["bastion-host"]
 
   log_config {
-    metadata = "INCLUDE_ALL_METADATA"rewall rule
+    metadata = "INCLUDE_ALL_METADATA"
+  }
+}
+
+# Add IAP firewall rule
 resource "google_compute_firewall" "iap_ssh" {
   name    = "${var.project_id}-allow-iap-ssh"
   network = google_compute_network.vpc_network.name
