@@ -78,7 +78,7 @@ resource "google_compute_subnetwork" "subnet" {
   }
 }
 
-# Create firewall rule for SSH access
+# Create firewall rule for SSH acces
 resource "google_compute_firewall" "bastion-ssh" {
   name    = "${var.project_id}-allow-bastion-ssh"
   network = google_compute_network.vpc_network.name
