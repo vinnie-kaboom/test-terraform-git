@@ -63,12 +63,12 @@ resource "google_compute_subnetwork" "subnet" {
 
   secondary_ip_range {
     range_name    = "pods"
-    ip_cidr_range = "172.16.0.0/20"
+    ip_cidr_range = "10.0.4.0/22"
   }
 
   secondary_ip_range {
     range_name    = "services"
-    ip_cidr_range = "172.16.16.0/24"
+    ip_cidr_range = "10.0.8.0/22"
   }
 
   lifecycle {
@@ -93,11 +93,7 @@ resource "google_compute_firewall" "bastion-ssh" {
   target_tags   = ["bastion-host"]
 
   log_config {
-    metadata = "INCLUDE_ALL_METADATA"
-  }
-}
-
-# Add IAP firewall rule
+    metadata = "INCLUDE_ALL_METADATA"rewall rule
 resource "google_compute_firewall" "iap_ssh" {
   name    = "${var.project_id}-allow-iap-ssh"
   network = google_compute_network.vpc_network.name
