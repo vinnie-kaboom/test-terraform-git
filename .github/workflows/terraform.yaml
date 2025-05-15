@@ -153,12 +153,20 @@ jobs:
           fi
 
       - name: 'Setup GCS Backend'
-        run: |
-          # Create the bucket if it doesn't exist
-          if ! gsutil ls gs://sylvan-apogee-450014-a6-terraform-state > /dev/null 2>&1; then
-            gsutil mb -p sylvan-apogee-450014-a6 gs://sylvan-apogee-450014-a6-terraform-state
-            gsutil versioning set on gs://sylvan-apogee-450014-a6-terraform-state
-          fi
+        uses: ./.github/actions/gcs-bucket-create
+        with:
+          bucket_name: sylvan-apogee-450014-a6-terraform-state
+          project_id: sylvan-apogee-450014-a6
+        env:
+          GOOGLE_APPLICATION_CREDENTIALS: ${{ secrets.GCP_SA_KEY }}
+
+      # - name: 'Setup GCS Backend'
+      #   run: |
+      #     # Create the bucket if it doesn't exist
+      #     if ! gsutil ls gs://sylvan-apogee-450014-a6-terraform-state > /dev/null 2>&1; then
+      #       gsutil mb -p sylvan-apogee-450014-a6 gs://sylvan-apogee-450014-a6-terraform-state
+      #       gsutil versioning set on gs://sylvan-apogee-450014-a6-terraform-state
+      #     fi
 
       - name: 'Setup Terraform'
         uses: hashicorp/setup-terraform@v3
