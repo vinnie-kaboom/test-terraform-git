@@ -1,0 +1,7 @@
+Starting galaxy collection install process
+Process install dependency map
+Starting collection install process
+Downloading https://galaxy.ansible.com/api/v3/plugin/ansible/content/published/collections/artifacts/community-vmware-5.7.1.tar.gz to /root/.ansible/tmp/ansible-local-13hhyq8z3/tmpg1duyzw7/community-vmware-5.7.1-m7dqpx0_
+Installing 'community.vmware:5.7.1' to '/root/.ansible/collections/ansible_collections/community/vmware'
+community.vmware:5.7.1 was installed successfully
+'vmware.vmware:2.2.0' is already installed, skipping.
