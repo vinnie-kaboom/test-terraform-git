@@ -1,0 +1,73 @@
+services:
+  ansible-domain-join:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: vzamora/ansible-join:latest
+    container_name: ansible-domain-join
+    profiles:
+      - production
+    environment:
+      - ANSIBLE_HOST_KEY_CHECKING=False
+      - ANSIBLE_FORCE_COLOR=1
+      - PYTHONUNBUFFERED=1
+    volumes:
+      - ./inventory:/ansible/inventory:ro
+      - ./configs:/ansible/configs:ro
+      - ./roles:/ansible/roles:ro
+      - ./playbooks:/ansible/playbooks:ro
+      - ./logs:/ansible/logs
+      - ./fact_cache:/ansible/fact_cache
+    networks:
+      - ansible-network
+    restart: "no"
+    labels:
+      - "com.example.type=task-based"
+      - "com.example.lifecycle=run-once"
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  ansible-dev:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: vzamora/ansible-join:dev
+    container_name: ansible-domain-join-dev
+    profiles:
+      - development
+    environment:
+      - ANSIBLE_HOST_KEY_CHECKING=False
+      - ANSIBLE_FORCE_COLOR=1
+      - PYTHONUNBUFFERED=1
+      - ANSIBLE_DEBUG=1
+    volumes:
+      - ./inventory:/ansible/inventory:ro
+      - ./configs:/ansible/configs:ro
+      - ./roles:/ansible/roles:ro
+      - ./playbooks:/ansible/playbooks:ro
+      - ./logs:/ansible/logs
+      - ./fact_cache:/ansible/fact_cache
+      - ./.ansible:/ansible/.ansible
+    networks:
+      - ansible-network
+    restart: "no"
+    labels:
+      - "com.example.type=task-based"
+      - "com.example.lifecycle=run-once"
+      - "com.example.environment=development"
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+networks:
+  ansible-network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16
+
